@@ -32,13 +32,13 @@ export async function structureSpeech(
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
       const prompt = `
-You are an expert AI note-taking assistant. Your job is to take a raw, spoken speech-to-text transcript and organize it into a highly professional, structured note.
+You are an expert PUA (Pickup Artist) and Dating Coach assistant. Your job is to analyze a raw conversation transcript of a pickup attempt, approach practice, or interaction sync, and structure it into professional coaching notes.
 
 Please output a JSON object containing the following keys:
-1. "title": A short, clean, descriptive title for the conversation (max 5-6 words).
-2. "summary": A concise narrative paragraph answering: "What conversation did I have with them?" (e.g. context, participants, main topic). Be professional and write in the first person ("I had a conversation with...").
-3. "takeaways": An array of EXACTLY three key points or decisions made during the conversation.
-4. "toWorkOn": An array of action items or things I need to work on.
+1. "title": A short, clean, descriptive title for the interaction (max 5-6 words, e.g., "Daygame approach at mall").
+2. "summary": A concise narrative paragraph summarizing the conversation, analyzing the chemistry, dynamics, and progression of the interaction. Focus on openers, hooked points, compliance, and Comfort. Be professional, coaching-oriented, and write in the first person ("I had an interaction with...").
+3. "takeaways": An array of EXACTLY three key dynamics, wins, or compliance milestones observed during the interaction (e.g. building comfort, successful teasing, phone number closed).
+4. "toWorkOn": An array of action items and specific game improvements I need to work on (e.g. inject more vocal range, practice active listening, smooth transition to flirtatious topics, avoid qualifying too early).
 
 Your output MUST be valid JSON conforming to this schema:
 {
@@ -93,12 +93,12 @@ function runLocalFallbackParser(transcript: string): AIStructuredNote {
     .filter(s => s.length > 3);
 
   // Extract a Title
-  let title = "Quick Conversation";
-  // Look for "meeting with X", "talked to Y", "conversation with Z"
-  const partnerMatch = transcript.match(/(?:talked to|meeting with|conversation with|spoke with|spoke to|chat with)\s+([A-Z][a-z]+|[a-zA-Z]+)/i);
+  let title = "Daygame Interaction";
+  // Look for "meeting with X", "talked to Y", "conversation with Z", "approached Z"
+  const partnerMatch = transcript.match(/(?:talked to|meeting with|conversation with|spoke with|spoke to|chat with|approached|opened)\s+([A-Z][a-z]+|[a-zA-Z]+)/i);
   if (partnerMatch && partnerMatch[1]) {
     const name = partnerMatch[1];
-    title = `Catch-up with ${name.charAt(0).toUpperCase() + name.slice(1)}`;
+    title = `Approach with ${name.charAt(0).toUpperCase() + name.slice(1)}`;
   } else if (sentences[0]) {
     // Take first few words of first sentence
     const words = sentences[0].split(/\s+/);
@@ -108,39 +108,37 @@ function runLocalFallbackParser(transcript: string): AIStructuredNote {
   }
 
   // Create Summary
-  let summary = `I recorded a conversation where I discussed: "${transcript.length > 120 ? transcript.slice(0, 120) + '...' : transcript}"`;
+  let summary = `I analyzed an interaction where the following transpired: "${transcript.length > 120 ? transcript.slice(0, 120) + '...' : transcript}"`;
   if (partnerMatch && partnerMatch[1]) {
     const name = partnerMatch[1].charAt(0).toUpperCase() + partnerMatch[1].slice(1);
-    summary = `I had a conversation with ${name} regarding our recent updates and discussed key topics related to it.`;
+    summary = `I had an interaction with ${name} where I practiced my opening and comfort game. We talked, vibed, and I worked on maintaining eye contact and smooth pacing.`;
   }
 
   // Extract Action Items (things to work on)
   const actionItems: string[] = [];
   const actionKeywords = [
-    "need to", "work on", "have to", "should", "will write", "will call", "will fix", "action item", "todo", "task", "must", "going to"
+    "need to", "work on", "have to", "should", "will write", "will call", "will fix", "action item", "todo", "task", "must", "going to", "practice", "improve"
   ];
   
   for (const sentence of sentences) {
     const lower = sentence.toLowerCase();
     if (actionKeywords.some(keyword => lower.includes(keyword))) {
-      // Clean up the sentence to make it sound like a task
       let task = sentence;
-      // Strip out words like "I need to", "I think I should" to make it action-oriented
       task = task.replace(/^I\s+(?:need to|have to|should|must|will)\s+/i, "Work on: ");
-      task = task.replace(/^We\s+(?:need to|have to|should|must|will)\s+/i, "Collaborate on: ");
+      task = task.replace(/^We\s+(?:need to|have to|should|must|will)\s+/i, "Action: ");
       actionItems.push(task);
     }
   }
 
   // Fallback action items if none found
   if (actionItems.length === 0) {
-    actionItems.push("Follow up on the items mentioned in this conversation.");
-    actionItems.push("Identify next steps based on the discussion details.");
+    actionItems.push("Work on maintaining solid vocal tonality and comfortable eye contact.");
+    actionItems.push("Practice smooth transitions from the opener to normal comfort building.");
+    actionItems.push("Inject more active teasing and playful banter into the dialogue.");
   }
 
   // Extract Takeaways
   const takeaways: string[] = [];
-  // Use sentences that are not action items
   const nonActionSentences = sentences.filter(s => !actionItems.includes(s));
   
   for (let i = 0; i < Math.min(3, nonActionSentences.length); i++) {
@@ -149,9 +147,9 @@ function runLocalFallbackParser(transcript: string): AIStructuredNote {
 
   // Fill in takeaways to guarantee exactly three
   const defaultTakeaways = [
-    "Established main context of the conversation and aligned on topics.",
-    "Reviewed current progress and identified open questions.",
-    "Decided on communication methods and outline of work."
+    "Initiated contact successfully and hooked attention.",
+    "Identified interest markers and comfort level throughout the talk.",
+    "Focused on confident body language and natural conversational flow."
   ];
 
   while (takeaways.length < 3) {

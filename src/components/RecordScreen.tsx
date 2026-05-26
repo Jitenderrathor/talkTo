@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Volume2, Square, X, RefreshCw, AlertCircle, HelpCircle, Keyboard } from 'lucide-react';
+import { Mic, Volume2, Square, X, RefreshCw, AlertCircle, HelpCircle, Keyboard, Upload } from 'lucide-react';
 import { structureSpeech } from '@/lib/gemini';
 import { saveConversation } from '@/lib/db';
+import { transcribeSpeech, structureSpeechWithGroq } from '@/lib/groq';
 
 interface RecordScreenProps {
   onClose: () => void;
@@ -13,6 +14,7 @@ interface RecordScreenProps {
 export default function RecordScreen({ onClose, onFinished }: RecordScreenProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('');
   const [duration, setDuration] = useState(0);
   const [transcript, setTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -25,6 +27,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Speech Recognition refs
   const recognitionRef = useRef<any>(null);
@@ -189,17 +192,76 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
     await processRecording(undefined, fallbackText.trim());
   };
 
-  const processRecording = async (audioBlob?: Blob, textToProcess?: string) => {
-    const finalTranscript = textToProcess || transcript || "Hello, I wanted to say there was a quick sync where we aligned on the mobile app design and the primary takeaways were that we need to use Next.js, IndexedDB for local storage, and the design needs to feel premium. I need to work on writing the components today.";
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
     
     setIsProcessing(true);
+    setProcessingStep('Reading uploaded audio file...');
+    
+    // Estimate the duration of the audio file.
+    const objectURL = URL.createObjectURL(file);
+    const audio = new Audio(objectURL);
+    
+    audio.addEventListener('loadedmetadata', () => {
+      const estimatedDuration = Math.round(audio.duration);
+      setDuration(estimatedDuration);
+      URL.revokeObjectURL(objectURL);
+      processRecording(file, undefined, estimatedDuration);
+    });
+
+    audio.addEventListener('error', (err) => {
+      console.error('Error loading audio metadata:', err);
+      setDuration(0);
+      URL.revokeObjectURL(objectURL);
+      processRecording(file, undefined, 0);
+    });
+  };
+
+  const processRecording = async (audioBlob?: Blob, textToProcess?: string, customDuration?: number) => {
+    setIsProcessing(true);
+    setErrorMessage(null);
+    
     try {
-      const apiKey = localStorage.getItem('talkto_gemini_api_key');
-      
-      // Structure the speech using Gemini or Fallback
-      const structuredNote = await structureSpeech(finalTranscript, apiKey);
-      
-      // Save to IndexedDB
+      const geminiApiKey = localStorage.getItem('talkto_gemini_api_key');
+      const groqApiKey = localStorage.getItem('talkto_groq_api_key');
+      const provider = localStorage.getItem('talkto_ai_provider') || 'groq';
+
+      let finalTranscript = textToProcess || transcript;
+
+      // 1. If we have a recorded audio blob and a Groq API key, perform Groq Whisper transcription
+      if (audioBlob && groqApiKey) {
+        setProcessingStep('Transcribing audio with Groq Whisper...');
+        try {
+          const transcribedText = await transcribeSpeech(audioBlob, groqApiKey);
+          if (transcribedText.trim()) {
+            finalTranscript = transcribedText.trim();
+            // Update local transcript state so it displays correctly
+            setTranscript(finalTranscript);
+          }
+        } catch (whisperErr) {
+          console.error('Groq Whisper transcription failed, falling back to local recognition:', whisperErr);
+        }
+      }
+
+      // If no speech transcript is recorded/provided, use a demo text preset
+      if (!finalTranscript.trim()) {
+        finalTranscript = "Hello, I wanted to say there was a quick sync where we aligned on the mobile app design and the primary takeaways were that we need to use Next.js, IndexedDB for local storage, and the design needs to feel premium. I need to work on writing the components today.";
+      }
+
+      // 2. Structure the final transcript using selected AI provider
+      let structuredNote;
+      if (provider === 'groq' && groqApiKey) {
+        setProcessingStep('Structuring notes with Groq Llama...');
+        structuredNote = await structureSpeechWithGroq(finalTranscript, groqApiKey);
+      } else {
+        setProcessingStep(geminiApiKey ? 'Structuring notes with Gemini AI...' : 'Local AI Structuring...');
+        structuredNote = await structureSpeech(finalTranscript, geminiApiKey);
+      }
+
+      // 3. Save to database
+      setProcessingStep('Saving to secure local database...');
       const now = new Date();
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -207,6 +269,8 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
       const formattedDate = `${year}-${month}-${day}`;
 
       const conversationId = `conv_${Date.now()}`;
+      
+      const finalDuration = customDuration !== undefined ? customDuration : duration;
       
       await saveConversation(
         {
@@ -220,7 +284,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
             takeaways: structuredNote.takeaways,
             toWorkOn: structuredNote.toWorkOn,
           },
-          duration: duration > 0 ? duration : undefined,
+          duration: finalDuration > 0 ? finalDuration : undefined,
         },
         audioBlob
       );
@@ -229,7 +293,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
       onFinished(conversationId);
     } catch (err) {
       console.error('Failed to structure conversation:', err);
-      setErrorMessage('Failed to process recording with AI. Please try again.');
+      setErrorMessage('Failed to process recording with AI. Please check your API keys and try again.');
       setIsProcessing(false);
     }
   };
@@ -254,7 +318,13 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
   };
 
   return (
-    <div className="absolute inset-0 z-40 bg-gray-950 flex flex-col justify-between p-6 animate-fade-in">
+    <div 
+      className="absolute inset-0 z-40 bg-gray-950 flex flex-col justify-between px-6 animate-fade-in"
+      style={{
+        paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))',
+        paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))',
+      }}
+    >
       {/* Top Header */}
       <div className="flex justify-between items-center shrink-0">
         <h2 className="text-xl font-bold bg-gradient-to-r from-violet-400 to-indigo-300 bg-clip-text text-transparent">
@@ -270,7 +340,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
       </div>
 
       {/* Center Speaker / Mic area */}
-      <div className="flex-1 flex flex-col items-center justify-center relative py-6">
+      <div className="flex-1 flex flex-col items-center justify-center relative py-6 overflow-y-auto max-h-full w-full">
         
         {/* Processing State */}
         {isProcessing ? (
@@ -279,7 +349,9 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
               <RefreshCw className="w-14 h-14 text-violet-400 animate-spin" />
             </div>
             <div className="text-center space-y-2">
-              <h3 className="text-lg font-semibold text-white">AI is organizing your speech...</h3>
+              <h3 className="text-lg font-semibold text-white">
+                {processingStep || 'AI is organizing your speech...'}
+              </h3>
               <p className="text-sm text-gray-500 max-w-xs leading-relaxed">
                 Structuring your conversation into context, takeaways, and action items.
               </p>
@@ -415,15 +487,31 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
         )}
       </div>
 
+      {/* Hidden file input for audio uploads */}
+      <input
+        type="file"
+        accept="audio/*"
+        ref={fileInputRef}
+        onChange={handleAudioUpload}
+        className="hidden"
+      />
+
       {/* Bottom Footer Actions */}
       {!isProcessing && !showTextFallback && (
-        <div className="flex justify-center border-t border-white/5 pt-4 shrink-0">
+        <div className="flex gap-3 border-t border-white/5 pt-4 shrink-0 w-full max-w-sm mx-auto">
           <button
             onClick={() => setShowTextFallback(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-gray-400 hover:text-white transition-all"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-gray-400 hover:text-white transition-all border border-white/5 hover:border-white/10"
           >
             <Keyboard className="w-4 h-4 text-violet-400" />
-            No Microphone? Use Simulator
+            Use Simulator
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600/25 hover:bg-violet-600/35 text-xs text-violet-300 hover:text-white transition-all border border-violet-500/20"
+          >
+            <Upload className="w-4 h-4 text-violet-400" />
+            Upload Audio
           </button>
         </div>
       )}

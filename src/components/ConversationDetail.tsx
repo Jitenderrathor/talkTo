@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Edit2, Save, Trash2, Play, Pause, RefreshCw, Calendar, Clock, ListChecks, Star, BookOpen, AlertCircle, Volume2 } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, Trash2, Play, Pause, RefreshCw, Calendar, Clock, ListChecks, Star, BookOpen, AlertCircle, Volume2, Mic } from 'lucide-react';
 import { getConversation, saveConversation, deleteConversation, ConversationDetail as IConversationDetail } from '@/lib/db';
+import { textToSpeech } from '@/lib/groq';
 
 interface ConversationDetailProps {
   id: string;
@@ -28,6 +29,81 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressIntervalRef = useRef<number | null>(null);
+
+  // Tab control (AI Notes vs Full Transcript)
+  const [activeTab, setActiveTab] = useState<'notes' | 'transcript'>('notes');
+
+  // Groq Text-to-Speech states
+  const [activeTtsSection, setActiveTtsSection] = useState<string | null>(null);
+  const [isTtsLoading, setIsTtsLoading] = useState(false);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handlePlayTts = async (text: string, sectionId: string) => {
+    // If it's already playing this section, pause it
+    if (activeTtsSection === sectionId) {
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+      }
+      setActiveTtsSection(null);
+      return;
+    }
+
+    // Stop any currently playing TTS
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+    }
+    setActiveTtsSection(null);
+
+    // Stop conversation audio if it's playing
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+      stopProgressTracker();
+    }
+
+    setIsTtsLoading(true);
+    try {
+      const groqApiKey = localStorage.getItem('talkto_groq_api_key');
+      const voice = localStorage.getItem('talkto_tts_voice') || 'diana';
+
+      if (!groqApiKey) {
+        alert("Please set your Groq API key in Settings to use Text-to-Speech!");
+        setIsTtsLoading(false);
+        return;
+      }
+
+      // Generate TTS blob using Groq API
+      const blob = await textToSpeech(text, voice, groqApiKey);
+      const url = URL.createObjectURL(blob);
+
+      // Create or update audio element
+      const audio = new Audio(url);
+      ttsAudioRef.current = audio;
+      
+      audio.onended = () => {
+        setActiveTtsSection(null);
+        URL.revokeObjectURL(url);
+      };
+
+      audio.onerror = () => {
+        console.error("TTS playback error");
+        setActiveTtsSection(null);
+        URL.revokeObjectURL(url);
+      };
+
+      setActiveTtsSection(sectionId);
+      setIsTtsLoading(false);
+      audio.play().catch(err => {
+        console.error("Failed to play TTS audio:", err);
+        setActiveTtsSection(null);
+      });
+    } catch (error) {
+      console.error("Groq TTS failed:", error);
+      alert("Groq Text-to-Speech failed. Check your API key or network connection.");
+      setIsTtsLoading(false);
+      setActiveTtsSection(null);
+    }
+  };
 
   // Load conversation details from DB
   useEffect(() => {
@@ -58,6 +134,10 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
       }
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
+      }
+      // Cleanup TTS audio
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
       }
     };
   }, [id]);
@@ -233,7 +313,12 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
   return (
     <div className="absolute inset-0 z-30 bg-gray-950 flex flex-col justify-between overflow-hidden">
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between p-5 border-b border-white/5 shrink-0">
+      <div 
+        className="flex items-center justify-between px-5 pb-5 border-b border-white/5 shrink-0"
+        style={{
+          paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))',
+        }}
+      >
         <button
           onClick={onBack}
           className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors"
@@ -271,7 +356,12 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
       </div>
 
       {/* Main Scrollable Content */}
-      <div className="flex-1 overflow-y-auto px-5 py-6 space-y-6 pb-28">
+      <div 
+        className="flex-1 overflow-y-auto px-5 py-6 space-y-6"
+        style={{
+          paddingBottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))',
+        }}
+      >
         
         {/* Title & Metadata Card */}
         <div className="space-y-3">
@@ -351,142 +441,301 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
         )}
 
         {/* Section 1: Conversation Context / Summary */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-            <BookOpen className="w-4 h-4 text-violet-400" />
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Conversation Details</h3>
+        {/* Tab Switcher */}
+        {!isEditing && (
+          <div className="flex border-b border-white/5 mb-6 shrink-0">
+            <button
+              onClick={() => setActiveTab('notes')}
+              className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
+                activeTab === 'notes'
+                  ? 'border-violet-500 text-violet-400 bg-white/5'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              AI Notes
+            </button>
+            <button
+              onClick={() => setActiveTab('transcript')}
+              className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
+                activeTab === 'transcript'
+                  ? 'border-violet-500 text-violet-400 bg-white/5'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              Full Transcript
+            </button>
           </div>
+        )}
 
-          {isEditing ? (
-            <textarea
-              value={editSummary}
-              onChange={(e) => setEditSummary(e.target.value)}
-              className="w-full h-28 bg-gray-900 border border-white/10 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-violet-500 resize-none leading-relaxed"
-              placeholder="What conversation did you have?..."
-            />
-          ) : (
-            <p className="text-sm text-gray-300 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/5 shadow-inner">
-              {conversation.structured.summary}
-            </p>
-          )}
-        </div>
-
-        {/* Section 2: Three takeaways */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-            <Star className="w-4 h-4 text-amber-400" />
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Three Key Takeaways</h3>
-          </div>
-
-          <div className="space-y-2.5">
-            {isEditing ? (
-              [0, 1, 2].map((idx) => (
-                <div key={idx} className="flex gap-2.5 items-center bg-gray-900 border border-white/10 rounded-xl px-4 py-2">
-                  <span className="text-xs font-mono font-bold text-violet-400">{idx + 1}.</span>
-                  <input
-                    type="text"
-                    value={editTakeaways[idx] || ''}
-                    onChange={(e) => handleTakeawayChange(idx, e.target.value)}
-                    className="flex-1 bg-transparent text-sm text-white focus:outline-none"
-                    placeholder={`Takeaway ${idx + 1}...`}
-                  />
+        {isEditing || activeTab === 'notes' ? (
+          <>
+            {/* Section 1: Conversation Context / Summary */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-violet-400" />
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Conversation Details</h3>
                 </div>
-              ))
-            ) : (
-              conversation.structured.takeaways.map((takeaway, idx) => (
-                <div
-                  key={idx}
-                  className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 items-start text-sm shadow-inner"
-                >
-                  <div className="w-6 h-6 rounded-full bg-violet-600/20 flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="text-xs font-bold text-violet-400">{idx + 1}</span>
-                  </div>
-                  <p className="text-gray-300 leading-relaxed pt-0.5">{takeaway}</p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+                {!isEditing && (
+                  <button
+                    onClick={() => handlePlayTts(conversation.structured.summary, 'summary')}
+                    disabled={isTtsLoading && activeTtsSection !== 'summary'}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                      activeTtsSection === 'summary'
+                        ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse'
+                        : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {isTtsLoading && activeTtsSection === 'summary' ? (
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Volume2 className="w-3 h-3" />
+                    )}
+                    <span>{activeTtsSection === 'summary' ? 'Speaking...' : 'Listen'}</span>
+                  </button>
+                )}
+              </div>
 
-        {/* Section 3: Things to work on */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-            <ListChecks className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Things to Work On</h3>
-          </div>
+              {isEditing ? (
+                <textarea
+                  value={editSummary}
+                  onChange={(e) => setEditSummary(e.target.value)}
+                  className="w-full h-28 bg-gray-900 border border-white/10 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-violet-500 resize-none leading-relaxed"
+                  placeholder="What conversation did you have?..."
+                />
+              ) : (
+                <p className="text-sm text-gray-300 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/5 shadow-inner">
+                  {conversation.structured.summary}
+                </p>
+              )}
+            </div>
 
-          <div className="space-y-2.5">
-            {isEditing ? (
-              <div className="space-y-3">
-                {/* Action Items List */}
-                <div className="space-y-2">
-                  {editToWorkOn.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2.5 bg-gray-900 border border-white/10 rounded-xl text-sm">
-                      <span className="text-white truncate pr-2">{item}</span>
+            {/* Section 2: Three takeaways */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                <Star className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Three Key Takeaways</h3>
+              </div>
+
+              <div className="space-y-2.5">
+                {isEditing ? (
+                  [0, 1, 2].map((idx) => (
+                    <div key={idx} className="flex gap-2.5 items-center bg-gray-900 border border-white/10 rounded-xl px-4 py-2">
+                      <span className="text-xs font-mono font-bold text-violet-400">{idx + 1}.</span>
+                      <input
+                        type="text"
+                        value={editTakeaways[idx] || ''}
+                        onChange={(e) => handleTakeawayChange(idx, e.target.value)}
+                        className="flex-1 bg-transparent text-sm text-white focus:outline-none"
+                        placeholder={`Takeaway ${idx + 1}...`}
+                      />
+                    </div>
+                  ))
+                ) : (
+                  conversation.structured.takeaways.map((takeaway, idx) => (
+                    <div
+                      key={idx}
+                      className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 items-start text-sm shadow-inner group"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-violet-600/20 flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="text-xs font-bold text-violet-400">{idx + 1}</span>
+                      </div>
+                      <p className="text-gray-300 leading-relaxed pt-0.5 flex-1">{takeaway}</p>
+                      
                       <button
-                        type="button"
-                        onClick={() => handleRemoveActionItem(idx)}
-                        className="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5"
+                        onClick={() => handlePlayTts(takeaway, `takeaway-${idx}`)}
+                        disabled={isTtsLoading && activeTtsSection !== `takeaway-${idx}`}
+                        className={`shrink-0 p-1.5 rounded-lg border transition-all md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 ${
+                          activeTtsSection === `takeaway-${idx}`
+                            ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse md:opacity-100'
+                            : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                        }`}
+                        title="Speak takeaway"
                       >
-                        Remove
+                        {isTtsLoading && activeTtsSection === `takeaway-${idx}` ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Volume2 className="w-3 h-3" />
+                        )}
                       </button>
                     </div>
-                  ))}
-                </div>
-                
-                {/* Add New Action Item */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newActionItem}
-                    onChange={(e) => setNewActionItem(e.target.value)}
-                    placeholder="Add action item..."
-                    className="flex-1 bg-gray-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddActionItem()}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddActionItem}
-                    className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-sm font-semibold text-white transition-colors"
-                  >
-                    Add
-                  </button>
-                </div>
+                  ))
+                )}
               </div>
-            ) : conversation.structured.toWorkOn.length > 0 ? (
-              conversation.structured.toWorkOn.map((action, idx) => (
-                <div
-                  key={idx}
-                  className="flex gap-3.5 p-4 bg-white/5 rounded-2xl border border-white/5 items-start text-sm shadow-inner"
+            </div>
+
+            {/* Section 3: Things to work on */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                <ListChecks className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Things to Work On</h3>
+              </div>
+
+              <div className="space-y-2.5">
+                {isEditing ? (
+                  <div className="space-y-3">
+                    {/* Action Items List */}
+                    <div className="space-y-2">
+                      {editToWorkOn.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2.5 bg-gray-900 border border-white/10 rounded-xl text-sm">
+                          <span className="text-white truncate pr-2">{item}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveActionItem(idx)}
+                            className="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Add New Action Item */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newActionItem}
+                        onChange={(e) => setNewActionItem(e.target.value)}
+                        placeholder="Add action item..."
+                        className="flex-1 bg-gray-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddActionItem()}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddActionItem}
+                        className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-sm font-semibold text-white transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                ) : conversation.structured.toWorkOn.length > 0 ? (
+                  conversation.structured.toWorkOn.map((action, idx) => (
+                    <div
+                      key={idx}
+                      className="flex gap-3.5 p-4 bg-white/5 rounded-2xl border border-white/5 items-start text-sm shadow-inner"
+                    >
+                      <input
+                        type="checkbox"
+                        readOnly
+                        className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-violet-600 focus:ring-violet-500 shrink-0 mt-1 cursor-not-allowed"
+                      />
+                      <p className="text-gray-300 leading-relaxed">{action}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-500 italic pl-1">No specific action items recorded.</p>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          /* Full Transcript Tab */
+          <div className="space-y-4 animate-fade-in pb-12">
+            {formatTranscript(conversation.transcript).length > 0 ? (
+              formatTranscript(conversation.transcript).map((segment) => (
+                <div 
+                  key={segment.id}
+                  className="p-4 rounded-2xl bg-white/5 border border-white/5 shadow-inner flex items-start gap-3.5 group"
                 >
-                  <input
-                    type="checkbox"
-                    readOnly
-                    className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-violet-600 focus:ring-violet-500 shrink-0 mt-1 cursor-not-allowed"
-                  />
-                  <p className="text-gray-300 leading-relaxed">{action}</p>
+                  <div className="w-8 h-8 rounded-full bg-violet-600/20 flex items-center justify-center shrink-0 mt-0.5 text-violet-400">
+                    <Mic className="w-4 h-4" />
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-xs font-bold text-violet-400 uppercase tracking-wider">
+                        {segment.speaker}
+                      </span>
+                      
+                      <button
+                        onClick={() => handlePlayTts(segment.text, `transcript-segment-${segment.id}`)}
+                        disabled={isTtsLoading && activeTtsSection !== `transcript-segment-${segment.id}`}
+                        className={`p-1.5 rounded-lg border transition-all md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 ${
+                          activeTtsSection === `transcript-segment-${segment.id}`
+                            ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse md:opacity-100'
+                            : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                        }`}
+                        title="Speak segment"
+                      >
+                        {isTtsLoading && activeTtsSection === `transcript-segment-${segment.id}` ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Volume2 className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
+                    
+                    <p className="text-sm text-gray-350 leading-relaxed font-sans">
+                      {segment.text}
+                    </p>
+                  </div>
                 </div>
               ))
             ) : (
-              <p className="text-xs text-gray-500 italic pl-1">No specific action items recorded.</p>
+              <p className="text-xs text-gray-500 italic pl-1 py-4">No speech transcript text recorded.</p>
             )}
           </div>
-        </div>
-
-        {/* Raw transcript toggler */}
-        <div className="pt-4 border-t border-white/5">
-          <details className="group">
-            <summary className="list-none flex items-center justify-between text-xs text-gray-500 cursor-pointer hover:text-gray-350 select-none">
-              <span>View Raw Speech Transcript</span>
-              <span className="transition-transform group-open:rotate-180">▼</span>
-            </summary>
-            <div className="mt-3 p-4 bg-gray-950/60 rounded-xl border border-white/5 text-xs text-gray-400 leading-relaxed font-serif italic">
-              "{conversation.transcript}"
-            </div>
-          </details>
-        </div>
+        )}
 
       </div>
     </div>
   );
+}
+
+/**
+ * Transcript dialogue turn formatter helper
+ */
+interface TranscriptSegment {
+  speaker: string;
+  text: string;
+  id: number;
+}
+
+function formatTranscript(text: string): TranscriptSegment[] {
+  const cleanText = text.trim();
+  if (!cleanText) return [];
+
+  // Check if transcript contains speaker turn labels like "Speaker 1:", "Me:", etc.
+  const speakerRegex = /(Speaker\s+\d+|Me|User|Assistant|Person\s+[A-Z]):/i;
+  
+  if (speakerRegex.test(cleanText)) {
+    const parts = cleanText.split(/(?=(?:Speaker\s+\d+|Me|User|Assistant|Person\s+[A-Z]):)/i);
+    return parts.map((part, index) => {
+      const match = part.match(/^((?:Speaker\s+\d+|Me|User|Assistant|Person\s+[A-Z])):([\s\S]*)$/i);
+      if (match) {
+        return {
+          speaker: match[1],
+          text: match[2].trim(),
+          id: index
+        };
+      }
+      return {
+        speaker: 'Speaker',
+        text: part.trim(),
+        id: index
+      };
+    }).filter(p => p.text.length > 0);
+  }
+  
+  // Otherwise split by sentence and group into readable segments of 2 sentences each
+  const sentences = cleanText.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 0);
+  const segments: TranscriptSegment[] = [];
+  
+  let currentGroup: string[] = [];
+  let segmentId = 0;
+  
+  for (let i = 0; i < sentences.length; i++) {
+    currentGroup.push(sentences[i]);
+    if (currentGroup.length === 2 || i === sentences.length - 1) {
+      segments.push({
+        speaker: 'Speech Segment',
+        text: currentGroup.join(' '),
+        id: segmentId++
+      });
+      currentGroup = [];
+    }
+  }
+  
+  return segments;
 }
