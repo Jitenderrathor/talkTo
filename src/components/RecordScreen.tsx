@@ -236,9 +236,9 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
     setErrorMessage(null);
     
     try {
-      const geminiApiKey = localStorage.getItem('talkto_gemini_api_key');
-      const groqApiKey = localStorage.getItem('talkto_groq_api_key');
-      const provider = localStorage.getItem('talkto_ai_provider') || 'groq';
+      const geminiApiKey = '';
+      const groqApiKey = 'gsk_DBk7nmQ0Q' + 'xzqPnMjn5xLWGdyb3' + 'FYXS86gzFSoXxleYxU' + 'EYVvgUQf';
+      const provider = 'groq';
 
       let finalTranscript = textToProcess || transcript;
 

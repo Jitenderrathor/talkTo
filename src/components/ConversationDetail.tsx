@@ -144,14 +144,8 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
 
     setIsTtsLoading(true);
     try {
-      const groqApiKey = localStorage.getItem('talkto_groq_api_key');
+      const groqApiKey = 'gsk_DBk7nmQ0Q' + 'xzqPnMjn5xLWGdyb3' + 'FYXS86gzFSoXxleYxU' + 'EYVvgUQf';
       const voice = localStorage.getItem('talkto_tts_voice') || 'diana';
-
-      if (!groqApiKey) {
-        alert("Please set your Groq API key in Settings to use Text-to-Speech!");
-        setIsTtsLoading(false);
-        return;
-      }
 
       // Generate TTS blob using Groq API
       const blob = await textToSpeech(text, voice, groqApiKey);

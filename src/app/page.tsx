@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Home, Plus, Mic, Calendar, ChevronRight, MicOff, MessageSquare, BookOpen, User, RefreshCw, StickyNote, Trash2, Edit2, Check, X, Sparkles, HelpCircle } from 'lucide-react';
+import { Home, Plus, Mic, Calendar, ChevronRight, MicOff, MessageSquare, BookOpen, User, RefreshCw, StickyNote, Trash2, Edit2, Check, X, Sparkles, HelpCircle } from 'lucide-react';
 import CalendarStrip from '@/components/CalendarStrip';
-import SettingsModal from '@/components/SettingsModal';
 import RecordScreen from '@/components/RecordScreen';
 import ConversationDetail from '@/components/ConversationDetail';
 import AppTour from '@/components/AppTour';
@@ -101,10 +100,8 @@ const manualSections = [
 export default function AppHome() {
   const [selectedDate, setSelectedDate] = useState('');
   const [conversations, setConversations] = useState<ConversationMetadata[]>([]);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeDetailId, setActiveDetailId] = useState<string | null>(null);
   const [isRecordingOpen, setIsRecordingOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   // Global Tasks Board states
   const [activeTab, setActiveTab] = useState<'feed' | 'tasks' | 'notes' | 'manual' | 'feedback'>('feed');
@@ -215,13 +212,7 @@ export default function AppHome() {
     }
   }, []);
 
-  // Check admin session on mount and when Settings modal opens/closes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const sessionAdmin = sessionStorage.getItem('talkto_admin_session') === 'true';
-      setIsAdmin(sessionAdmin);
-    }
-  }, [isSettingsOpen]);
+  // Admin and settings checks removed
 
   // Fetch conversations from DB
   const loadConversations = async () => {
@@ -351,16 +342,6 @@ export default function AppHome() {
               TalkTo
             </h1>
           </div>
-          
-          {isAdmin && (
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
-              aria-label="Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          )}
         </header>
 
         {/* Core Home Content */}
@@ -1077,11 +1058,7 @@ export default function AppHome() {
           </button>
         </div>
 
-        {/* Settings Modal */}
-        <SettingsModal
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-        />
+        {/* Settings Modal Removed */}
 
       </div>
     </main>
