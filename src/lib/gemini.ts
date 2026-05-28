@@ -1,10 +1,18 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-export interface AIStructuredNote {
-  title: string;
-  summary: string;
-  takeaways: string[];
-  toWorkOn: string[];
+export interface AIStructuredNoteResponse {
+  aiNotes: {
+    title: string;
+    summary: string;
+    takeaways: string[];
+    toWorkOn: string[];
+  };
+  transcriptStructured: {
+    summary: string;
+    conversation: string;
+    takeaways: string[];
+    toWorkOn: string[];
+  };
 }
 
 /**
@@ -14,14 +22,22 @@ export interface AIStructuredNote {
 export async function structureSpeech(
   transcript: string,
   apiKey?: string | null
-): Promise<AIStructuredNote> {
+): Promise<AIStructuredNoteResponse> {
   const cleanTranscript = transcript.trim();
   if (!cleanTranscript) {
     return {
-      title: "Empty Recording",
-      summary: "No spoken text was recorded in this conversation.",
-      takeaways: ["No speech detected", "Make sure microphone permissions are allowed", "Try speaking clearly next time"],
-      toWorkOn: ["Check mic settings"]
+      aiNotes: {
+        title: "Empty Recording",
+        summary: "No spoken text was recorded in this conversation.",
+        takeaways: ["No speech detected", "Make sure microphone permissions are allowed", "Try speaking clearly next time"],
+        toWorkOn: ["Check mic settings"]
+      },
+      transcriptStructured: {
+        summary: "No dictation summary.",
+        conversation: "",
+        takeaways: [],
+        toWorkOn: []
+      }
     };
   }
 
@@ -32,20 +48,37 @@ export async function structureSpeech(
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
       const prompt = `
-You are an expert PUA (Pickup Artist) and Dating Coach assistant. Your job is to analyze a raw conversation transcript of a pickup attempt, approach practice, or interaction sync, and structure it into professional coaching notes.
+You are an expert PUA (Pickup Artist) and Dating Coach assistant.
+Your job is to analyze a raw conversation transcript where the user dictates an interaction. The user may speak in Hindi, English, or a mix of both (Hinglish).
 
-Please output a JSON object containing the following keys:
-1. "title": A short, clean, descriptive title for the interaction (max 5-6 words, e.g., "Daygame approach at mall").
-2. "summary": A concise narrative paragraph summarizing the conversation, analyzing the chemistry, dynamics, and progression of the interaction. Focus on openers, hooked points, compliance, and Comfort. Be professional, coaching-oriented, and write in the first person ("I had an interaction with...").
-3. "takeaways": An array of EXACTLY three key dynamics, wins, or compliance milestones observed during the interaction (e.g. building comfort, successful teasing, phone number closed).
-4. "toWorkOn": An array of action items and specific game improvements I need to work on (e.g. inject more vocal range, practice active listening, smooth transition to flirtatious topics, avoid qualifying too early).
+Please output a JSON object containing two main keys:
+1. "aiNotes": An object containing the AI dating coach's structured notes based on the interaction. Focus on openers, hooked points, comfort-building, compliance, chemistry, and actionable improvements.
+   - "title": A short, clean, descriptive title for the interaction (max 5-6 words, e.g., "Daygame approach at mall").
+   - "summary": A concise narrative paragraph summarizing the conversation and analyzing the chemistry, dynamics, and progression from a coach's perspective. Write in the first person ("I analyzed an interaction where...").
+   - "takeaways": An array of EXACTLY three key compliance points or dynamics observed (e.g., hook achieved, comfort established, number closed).
+   - "toWorkOn": An array of specific improvements the user should work on (e.g., vocal range, teasing).
+2. "transcriptStructured": An object containing the exact transcription sections as dictated by the user, checked ONLY for spelling typos and critical grammatical issues.
+   CRITICAL REQUIREMENT: For "transcriptStructured.conversation", DO NOT rewrite, paraphrase, summarize, or translate the user's spoken words. Preserve their exact words, phrasing, vocabulary, tone, and language (whether Hindi, English, or Hinglish) 100% verbatim. Fix ONLY spelling errors or minor grammatical issues. If there are no issues, keep the text completely untouched.
+   For sections inside "transcriptStructured":
+   - "summary": A brief, faithful summary of what they dictated (preserving the user's original language, tone, and vocabulary; only correcting spelling/typos).
+   - "conversation": The segment representing the conversation description, completely verbatim except for spelling/grammar fixes.
+   - "takeaways": Extract any takeaways or key points the user spoke about. If explicitly dictated (e.g., after the word "takeaways"), list those points. If not explicitly dictated but discussed, extract them using the user's exact phrasing and language as closely as possible, only correcting spelling/grammar.
+   - "toWorkOn": Extract any action items or things to work on the user spoke about. If explicitly dictated (e.g., after "things to work on"), list them. If not explicitly dictated but discussed, extract them using the user's exact phrasing and language as closely as possible, only correcting spelling/grammar.
 
 Your output MUST be valid JSON conforming to this schema:
 {
-  "title": "string",
-  "summary": "string",
-  "takeaways": ["string", "string", "string"],
-  "toWorkOn": ["string", "string"]
+  "aiNotes": {
+    "title": "string",
+    "summary": "string",
+    "takeaways": ["string", "string", "string"],
+    "toWorkOn": ["string", "string"]
+  },
+  "transcriptStructured": {
+    "summary": "string",
+    "conversation": "string",
+    "takeaways": ["string", "string"],
+    "toWorkOn": ["string", "string"]
+  }
 }
 
 Do not include any markdown formatting like \`\`\`json or \`\`\` around the JSON. Output only the raw JSON.
@@ -62,20 +95,30 @@ Transcript to structure:
       });
 
       const responseText = result.response.text();
-      const parsed = JSON.parse(responseText.trim()) as AIStructuredNote;
+      const parsed = JSON.parse(responseText.trim()) as AIStructuredNoteResponse;
       
-      // Ensure takeaways has exactly 3 elements (or backfill if necessary)
-      while (parsed.takeaways.length < 3) {
-        parsed.takeaways.push("Discussed topics from the conversation.");
+      // Ensure takeaways has exactly 3 elements
+      if (!parsed.aiNotes.takeaways) parsed.aiNotes.takeaways = [];
+      while (parsed.aiNotes.takeaways.length < 3) {
+        parsed.aiNotes.takeaways.push("Discussed topics from the conversation.");
       }
-      if (parsed.takeaways.length > 3) {
-        parsed.takeaways = parsed.takeaways.slice(0, 3);
+      if (parsed.aiNotes.takeaways.length > 3) {
+        parsed.aiNotes.takeaways = parsed.aiNotes.takeaways.slice(0, 3);
+      }
+
+      if (!parsed.aiNotes.toWorkOn) parsed.aiNotes.toWorkOn = [];
+      if (!parsed.transcriptStructured) {
+        parsed.transcriptStructured = {
+          summary: "",
+          conversation: cleanTranscript,
+          takeaways: [],
+          toWorkOn: []
+        };
       }
 
       return parsed;
     } catch (error) {
       console.error("Gemini API structuring failed, falling back to local parser:", error);
-      // Fall through to local fallback
     }
   }
 
@@ -86,7 +129,7 @@ Transcript to structure:
 /**
  * Parses raw text client-side to simulate AI structuring using heuristics.
  */
-function runLocalFallbackParser(transcript: string): AIStructuredNote {
+function runLocalFallbackParser(transcript: string): AIStructuredNoteResponse {
   const sentences = transcript
     .split(/[.!?]+/)
     .map(s => s.trim())
@@ -94,13 +137,11 @@ function runLocalFallbackParser(transcript: string): AIStructuredNote {
 
   // Extract a Title
   let title = "Daygame Interaction";
-  // Look for "meeting with X", "talked to Y", "conversation with Z", "approached Z"
   const partnerMatch = transcript.match(/(?:talked to|meeting with|conversation with|spoke with|spoke to|chat with|approached|opened)\s+([A-Z][a-z]+|[a-zA-Z]+)/i);
   if (partnerMatch && partnerMatch[1]) {
     const name = partnerMatch[1];
     title = `Approach with ${name.charAt(0).toUpperCase() + name.slice(1)}`;
   } else if (sentences[0]) {
-    // Take first few words of first sentence
     const words = sentences[0].split(/\s+/);
     if (words.length > 1) {
       title = words.slice(0, 4).join(" ") + "...";
@@ -130,7 +171,6 @@ function runLocalFallbackParser(transcript: string): AIStructuredNote {
     }
   }
 
-  // Fallback action items if none found
   if (actionItems.length === 0) {
     actionItems.push("Work on maintaining solid vocal tonality and comfortable eye contact.");
     actionItems.push("Practice smooth transitions from the opener to normal comfort building.");
@@ -145,7 +185,6 @@ function runLocalFallbackParser(transcript: string): AIStructuredNote {
     takeaways.push(nonActionSentences[i]);
   }
 
-  // Fill in takeaways to guarantee exactly three
   const defaultTakeaways = [
     "Initiated contact successfully and hooked attention.",
     "Identified interest markers and comfort level throughout the talk.",
@@ -156,10 +195,53 @@ function runLocalFallbackParser(transcript: string): AIStructuredNote {
     takeaways.push(defaultTakeaways[takeaways.length]);
   }
 
+  // Attempt to parse explicit dictated sections for the transcript structured block
+  // If user dictates "conversation", "takeaways", "things to work on"
+  let conversationPart = transcript;
+  let dictatedTakeaways: string[] = [];
+  let dictatedToWorkOn: string[] = [];
+
+  const lowerTrans = transcript.toLowerCase();
+  const takeawaysIndex = lowerTrans.indexOf("takeaways");
+  const workOnIndex = lowerTrans.indexOf("things to work on");
+
+  if (takeawaysIndex !== -1 || workOnIndex !== -1) {
+    let endOfConv = transcript.length;
+    if (takeawaysIndex !== -1) endOfConv = Math.min(endOfConv, takeawaysIndex);
+    if (workOnIndex !== -1) endOfConv = Math.min(endOfConv, workOnIndex);
+
+    conversationPart = transcript.substring(0, endOfConv).replace(/conversation:?/i, "").trim();
+
+    if (takeawaysIndex !== -1) {
+      const start = takeawaysIndex + "takeaways".length;
+      const end = workOnIndex !== -1 && workOnIndex > takeawaysIndex ? workOnIndex : transcript.length;
+      const rawPoints = transcript.substring(start, end).split(/[.,;]+|\band\b/i).map(s => s.trim()).filter(s => s.length > 5);
+      dictatedTakeaways = rawPoints.length > 0 ? rawPoints : ["User listed takeaways in dictation."];
+    }
+
+    if (workOnIndex !== -1) {
+      const start = workOnIndex + "things to work on".length;
+      const rawPoints = transcript.substring(start).split(/[.,;]+|\band\b/i).map(s => s.trim()).filter(s => s.length > 5);
+      dictatedToWorkOn = rawPoints.length > 0 ? rawPoints : ["User listed things to work on in dictation."];
+    }
+  } else {
+    conversationPart = transcript;
+    dictatedTakeaways = [takeaways[0]];
+    dictatedToWorkOn = [actionItems[0]];
+  }
+
   return {
-    title: title.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "").trim(),
-    summary,
-    takeaways,
-    toWorkOn: actionItems.slice(0, 4) // cap at 4 action items
+    aiNotes: {
+      title: title.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "").trim(),
+      summary,
+      takeaways,
+      toWorkOn: actionItems.slice(0, 4)
+    },
+    transcriptStructured: {
+      summary: `Cleaned transcription summary of the dictated interaction.`,
+      conversation: conversationPart,
+      takeaways: dictatedTakeaways,
+      toWorkOn: dictatedToWorkOn
+    }
   };
 }

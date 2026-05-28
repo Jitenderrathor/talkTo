@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Edit2, Save, Trash2, Play, Pause, RefreshCw, Calendar, Clock, ListChecks, Star, BookOpen, AlertCircle, Volume2, Mic } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, Trash2, Play, Pause, RefreshCw, Calendar, Clock, ListChecks, Star, BookOpen, AlertCircle, Volume2, Mic, Copy, Plus, Check, X } from 'lucide-react';
 import { getConversation, saveConversation, deleteConversation, ConversationDetail as IConversationDetail } from '@/lib/db';
 import { textToSpeech } from '@/lib/groq';
 
@@ -16,9 +16,42 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editSummary, setEditSummary] = useState('');
-  const [editTakeaways, setEditTakeaways] = useState<string[]>(['', '', '']);
+  const [editTakeaways, setEditTakeaways] = useState<string[]>([]);
   const [editToWorkOn, setEditToWorkOn] = useState<string[]>([]);
   const [newActionItem, setNewActionItem] = useState('');
+  const [newTakeawayText, setNewTakeawayText] = useState('');
+
+  // States for transcript structured editing
+  const [editTransSummary, setEditTransSummary] = useState('');
+  const [editTransConversation, setEditTransConversation] = useState('');
+  const [editTransTakeaways, setEditTransTakeaways] = useState<string[]>([]);
+  const [editTransToWorkOn, setEditTransToWorkOn] = useState<string[]>([]);
+  const [newTransTakeawayText, setNewTransTakeawayText] = useState('');
+  const [newTransWorkOnText, setNewTransWorkOnText] = useState('');
+
+  // Local inline editing states for Full Transcript display mode
+  const [isEditingConvText, setIsEditingConvText] = useState(false);
+  const [tempConvText, setTempConvText] = useState('');
+  
+  const [editingTakeawayIndex, setEditingTakeawayIndex] = useState<number | null>(null);
+  const [tempTakeawayText, setTempTakeawayText] = useState('');
+  const [newLocalTakeaway, setNewLocalTakeaway] = useState('');
+  const [showAddTakeawayForm, setShowAddTakeawayForm] = useState(false);
+
+  const [editingWorkOnIndex, setEditingWorkOnIndex] = useState<number | null>(null);
+  const [tempWorkOnText, setTempWorkOnText] = useState('');
+  const [newLocalWorkOn, setNewLocalWorkOn] = useState('');
+  const [showAddWorkOnForm, setShowAddWorkOnForm] = useState(false);
+
+  const [copiedSection, setCopiedSection] = useState<string | null>(null);
+
+  const handleCopyText = (text: string, sectionId: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedSection(sectionId);
+    setTimeout(() => {
+      setCopiedSection(null);
+    }, 1500);
+  };
   
   // Audio Playback states
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -116,6 +149,18 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
         setEditSummary(data.structured.summary);
         setEditTakeaways([...data.structured.takeaways]);
         setEditToWorkOn([...data.structured.toWorkOn]);
+        
+        if (data.transcriptStructured) {
+          setEditTransSummary(data.transcriptStructured.summary || '');
+          setEditTransConversation(data.transcriptStructured.conversation || '');
+          setEditTransTakeaways([...(data.transcriptStructured.takeaways || [])]);
+          setEditTransToWorkOn([...(data.transcriptStructured.toWorkOn || [])]);
+        } else {
+          setEditTransSummary('');
+          setEditTransConversation(data.transcript || '');
+          setEditTransTakeaways([]);
+          setEditTransToWorkOn([]);
+        }
 
         // Setup audio URL if blob exists
         if (data.audioBlob) {
@@ -221,6 +266,12 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
         summary: editSummary.trim() || conversation.structured.summary,
         takeaways: editTakeaways.map(t => t.trim()).filter(Boolean),
         toWorkOn: editToWorkOn.map(t => t.trim()).filter(Boolean),
+      },
+      transcriptStructured: {
+        summary: editTransSummary.trim(),
+        conversation: editTransConversation,
+        takeaways: editTransTakeaways.map(t => t.trim()).filter(Boolean),
+        toWorkOn: editTransToWorkOn.map(t => t.trim()).filter(Boolean),
       }
     };
 
@@ -251,6 +302,23 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
     setEditTakeaways(updated);
   };
 
+  const handleRemoveTakeaway = (index: number) => {
+    setEditTakeaways(editTakeaways.filter((_, i) => i !== index));
+  };
+
+  const handleAddTakeaway = () => {
+    if (newTakeawayText.trim()) {
+      setEditTakeaways([...editTakeaways, newTakeawayText.trim()]);
+      setNewTakeawayText('');
+    }
+  };
+
+  const handleToWorkOnChange = (index: number, val: string) => {
+    const updated = [...editToWorkOn];
+    updated[index] = val;
+    setEditToWorkOn(updated);
+  };
+
   const handleRemoveActionItem = (index: number) => {
     setEditToWorkOn(editToWorkOn.filter((_, i) => i !== index));
   };
@@ -259,6 +327,196 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
     if (newActionItem.trim()) {
       setEditToWorkOn([...editToWorkOn, newActionItem.trim()]);
       setNewActionItem('');
+    }
+  };
+
+  // Transcript Structured helpers
+  const handleTransTakeawayChange = (index: number, val: string) => {
+    const updated = [...editTransTakeaways];
+    updated[index] = val;
+    setEditTransTakeaways(updated);
+  };
+
+  const handleRemoveTransTakeaway = (index: number) => {
+    setEditTransTakeaways(editTransTakeaways.filter((_, i) => i !== index));
+  };
+
+  const handleAddTransTakeaway = () => {
+    if (newTransTakeawayText.trim()) {
+      setEditTransTakeaways([...editTransTakeaways, newTransTakeawayText.trim()]);
+      setNewTransTakeawayText('');
+    }
+  };
+
+  const handleTransToWorkOnChange = (index: number, val: string) => {
+    const updated = [...editTransToWorkOn];
+    updated[index] = val;
+    setEditTransToWorkOn(updated);
+  };
+
+  const handleRemoveTransToWorkOn = (index: number) => {
+    setEditTransToWorkOn(editTransToWorkOn.filter((_, i) => i !== index));
+  };
+
+  const handleAddTransToWorkOn = () => {
+    if (newTransWorkOnText.trim()) {
+      setEditTransToWorkOn([...editTransToWorkOn, newTransWorkOnText.trim()]);
+      setNewTransWorkOnText('');
+    }
+  };
+
+  // Direct local editing handlers (auto-save to database)
+  const handleSaveLocalConvText = async (newText: string) => {
+    if (!conversation) return;
+    const updated: IConversationDetail = {
+      ...conversation,
+      transcriptStructured: {
+        summary: conversation.transcriptStructured?.summary || '',
+        takeaways: conversation.transcriptStructured?.takeaways || [],
+        toWorkOn: conversation.transcriptStructured?.toWorkOn || [],
+        conversation: newText
+      }
+    };
+    try {
+      await saveConversation(updated);
+      setConversation(updated);
+      setEditTransConversation(newText);
+    } catch (err) {
+      console.error("Failed to save local conversation text:", err);
+    }
+  };
+
+  const handleSaveLocalTakeaway = async (index: number, newText: string) => {
+    if (!conversation) return;
+    const currentTakeaways = conversation.transcriptStructured?.takeaways || [];
+    const newTakeaways = [...currentTakeaways];
+    newTakeaways[index] = newText;
+    const updated: IConversationDetail = {
+      ...conversation,
+      transcriptStructured: {
+        summary: conversation.transcriptStructured?.summary || '',
+        conversation: conversation.transcriptStructured?.conversation || conversation.transcript || '',
+        toWorkOn: conversation.transcriptStructured?.toWorkOn || [],
+        takeaways: newTakeaways
+      }
+    };
+    try {
+      await saveConversation(updated);
+      setConversation(updated);
+      setEditTransTakeaways(newTakeaways);
+    } catch (err) {
+      console.error("Failed to save local takeaway:", err);
+    }
+  };
+
+  const handleRemoveLocalTakeaway = async (index: number) => {
+    if (!conversation) return;
+    const currentTakeaways = conversation.transcriptStructured?.takeaways || [];
+    const newTakeaways = currentTakeaways.filter((_, i) => i !== index);
+    const updated: IConversationDetail = {
+      ...conversation,
+      transcriptStructured: {
+        summary: conversation.transcriptStructured?.summary || '',
+        conversation: conversation.transcriptStructured?.conversation || conversation.transcript || '',
+        toWorkOn: conversation.transcriptStructured?.toWorkOn || [],
+        takeaways: newTakeaways
+      }
+    };
+    try {
+      await saveConversation(updated);
+      setConversation(updated);
+      setEditTransTakeaways(newTakeaways);
+    } catch (err) {
+      console.error("Failed to delete local takeaway:", err);
+    }
+  };
+
+  const handleAddLocalTakeaway = async (newText: string) => {
+    if (!conversation || !newText.trim()) return;
+    const currentTakeaways = conversation.transcriptStructured?.takeaways || [];
+    const newTakeaways = [...currentTakeaways, newText.trim()];
+    const updated: IConversationDetail = {
+      ...conversation,
+      transcriptStructured: {
+        summary: conversation.transcriptStructured?.summary || '',
+        conversation: conversation.transcriptStructured?.conversation || conversation.transcript || '',
+        toWorkOn: conversation.transcriptStructured?.toWorkOn || [],
+        takeaways: newTakeaways
+      }
+    };
+    try {
+      await saveConversation(updated);
+      setConversation(updated);
+      setEditTransTakeaways(newTakeaways);
+    } catch (err) {
+      console.error("Failed to add local takeaway:", err);
+    }
+  };
+
+  const handleSaveLocalWorkOn = async (index: number, newText: string) => {
+    if (!conversation) return;
+    const currentWork = conversation.transcriptStructured?.toWorkOn || [];
+    const newWork = [...currentWork];
+    newWork[index] = newText;
+    const updated: IConversationDetail = {
+      ...conversation,
+      transcriptStructured: {
+        summary: conversation.transcriptStructured?.summary || '',
+        conversation: conversation.transcriptStructured?.conversation || conversation.transcript || '',
+        takeaways: conversation.transcriptStructured?.takeaways || [],
+        toWorkOn: newWork
+      }
+    };
+    try {
+      await saveConversation(updated);
+      setConversation(updated);
+      setEditTransToWorkOn(newWork);
+    } catch (err) {
+      console.error("Failed to save local action item:", err);
+    }
+  };
+
+  const handleRemoveLocalWorkOn = async (index: number) => {
+    if (!conversation) return;
+    const currentWork = conversation.transcriptStructured?.toWorkOn || [];
+    const newWork = currentWork.filter((_, i) => i !== index);
+    const updated: IConversationDetail = {
+      ...conversation,
+      transcriptStructured: {
+        summary: conversation.transcriptStructured?.summary || '',
+        conversation: conversation.transcriptStructured?.conversation || conversation.transcript || '',
+        takeaways: conversation.transcriptStructured?.takeaways || [],
+        toWorkOn: newWork
+      }
+    };
+    try {
+      await saveConversation(updated);
+      setConversation(updated);
+      setEditTransToWorkOn(newWork);
+    } catch (err) {
+      console.error("Failed to remove local action item:", err);
+    }
+  };
+
+  const handleAddLocalWorkOn = async (newText: string) => {
+    if (!conversation || !newText.trim()) return;
+    const currentWork = conversation.transcriptStructured?.toWorkOn || [];
+    const newWork = [...currentWork, newText.trim()];
+    const updated: IConversationDetail = {
+      ...conversation,
+      transcriptStructured: {
+        summary: conversation.transcriptStructured?.summary || '',
+        conversation: conversation.transcriptStructured?.conversation || conversation.transcript || '',
+        takeaways: conversation.transcriptStructured?.takeaways || [],
+        toWorkOn: newWork
+      }
+    };
+    try {
+      await saveConversation(updated);
+      setConversation(updated);
+      setEditTransToWorkOn(newWork);
+    } catch (err) {
+      console.error("Failed to add local action item:", err);
     }
   };
 
@@ -311,7 +569,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
   }
 
   return (
-    <div className="absolute inset-0 z-30 bg-gray-950 flex flex-col justify-between overflow-hidden">
+    <div className="absolute inset-0 z-40 bg-gray-950 flex flex-col justify-between overflow-hidden">
       {/* Top Header Bar */}
       <div 
         className="flex items-center justify-between px-5 pb-5 border-b border-white/5 shrink-0"
@@ -442,32 +700,31 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
 
         {/* Section 1: Conversation Context / Summary */}
         {/* Tab Switcher */}
-        {!isEditing && (
-          <div className="flex border-b border-white/5 mb-6 shrink-0">
-            <button
-              onClick={() => setActiveTab('notes')}
-              className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
-                activeTab === 'notes'
-                  ? 'border-violet-500 text-violet-400 bg-white/5'
-                  : 'border-transparent text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              AI Notes
-            </button>
-            <button
-              onClick={() => setActiveTab('transcript')}
-              className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
-                activeTab === 'transcript'
-                  ? 'border-violet-500 text-violet-400 bg-white/5'
-                  : 'border-transparent text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              Full Transcript
-            </button>
-          </div>
-        )}
+        {/* Tab Switcher */}
+        <div className="flex border-b border-white/5 mb-6 shrink-0">
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
+              activeTab === 'notes'
+                ? 'border-violet-500 text-violet-400 bg-white/5'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            AI Notes {isEditing && <span className="text-[10px] text-gray-500 font-mono">(Edit)</span>}
+          </button>
+          <button
+            onClick={() => setActiveTab('transcript')}
+            className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
+              activeTab === 'transcript'
+                ? 'border-violet-500 text-violet-400 bg-white/5'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            Full Transcript {isEditing && <span className="text-[10px] text-gray-500 font-mono">(Edit)</span>}
+          </button>
+        </div>
 
-        {isEditing || activeTab === 'notes' ? (
+        {activeTab === 'notes' ? (
           <>
             {/* Section 1: Conversation Context / Summary */}
             <div className="space-y-3">
@@ -504,7 +761,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                   placeholder="What conversation did you have?..."
                 />
               ) : (
-                <p className="text-sm text-gray-300 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/5 shadow-inner">
+                <p className="text-sm text-gray-305 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/5 shadow-inner">
                   {conversation.structured.summary}
                 </p>
               )}
@@ -519,18 +776,48 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
 
               <div className="space-y-2.5">
                 {isEditing ? (
-                  [0, 1, 2].map((idx) => (
-                    <div key={idx} className="flex gap-2.5 items-center bg-gray-900 border border-white/10 rounded-xl px-4 py-2">
-                      <span className="text-xs font-mono font-bold text-violet-400">{idx + 1}.</span>
+                  <div className="space-y-3">
+                    {/* Takeaways List */}
+                    <div className="space-y-2">
+                      {editTakeaways.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-2.5 bg-gray-900 border border-white/10 rounded-xl px-4 py-2">
+                          <span className="text-xs font-mono font-bold text-violet-400">{idx + 1}.</span>
+                          <input
+                            type="text"
+                            value={item}
+                            onChange={(e) => handleTakeawayChange(idx, e.target.value)}
+                            className="flex-1 bg-transparent text-sm text-white focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTakeaway(idx)}
+                            className="text-red-400 hover:text-red-305 font-semibold px-2 py-0.5 text-xs"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add New Takeaway */}
+                    <div className="flex gap-2">
                       <input
                         type="text"
-                        value={editTakeaways[idx] || ''}
-                        onChange={(e) => handleTakeawayChange(idx, e.target.value)}
-                        className="flex-1 bg-transparent text-sm text-white focus:outline-none"
-                        placeholder={`Takeaway ${idx + 1}...`}
+                        value={newTakeawayText}
+                        onChange={(e) => setNewTakeawayText(e.target.value)}
+                        placeholder="Add takeaway point..."
+                        className="flex-1 bg-gray-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddTakeaway()}
                       />
+                      <button
+                        type="button"
+                        onClick={handleAddTakeaway}
+                        className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-sm font-semibold text-white transition-colors"
+                      >
+                        Add
+                      </button>
                     </div>
-                  ))
+                  </div>
                 ) : (
                   conversation.structured.takeaways.map((takeaway, idx) => (
                     <div
@@ -540,7 +827,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                       <div className="w-6 h-6 rounded-full bg-violet-600/20 flex items-center justify-center shrink-0 mt-0.5">
                         <span className="text-xs font-bold text-violet-400">{idx + 1}</span>
                       </div>
-                      <p className="text-gray-300 leading-relaxed pt-0.5 flex-1">{takeaway}</p>
+                      <p className="text-gray-305 leading-relaxed pt-0.5 flex-1">{takeaway}</p>
                       
                       <button
                         onClick={() => handlePlayTts(takeaway, `takeaway-${idx}`)}
@@ -577,12 +864,17 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                     {/* Action Items List */}
                     <div className="space-y-2">
                       {editToWorkOn.map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2.5 bg-gray-900 border border-white/10 rounded-xl text-sm">
-                          <span className="text-white truncate pr-2">{item}</span>
+                        <div key={idx} className="flex items-center justify-between gap-2 p-2 bg-gray-900 border border-white/10 rounded-xl text-sm">
+                          <input
+                            type="text"
+                            value={item}
+                            onChange={(e) => handleToWorkOnChange(idx, e.target.value)}
+                            className="flex-1 bg-transparent text-sm text-white focus:outline-none pl-2"
+                          />
                           <button
                             type="button"
                             onClick={() => handleRemoveActionItem(idx)}
-                            className="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5"
+                            className="text-red-400 hover:text-red-305 font-semibold px-2 py-0.5 text-xs"
                           >
                             Remove
                           </button>
@@ -620,62 +912,595 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                         readOnly
                         className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-violet-600 focus:ring-violet-500 shrink-0 mt-1 cursor-not-allowed"
                       />
-                      <p className="text-gray-300 leading-relaxed">{action}</p>
+                      <p className="text-gray-305 leading-relaxed">{action}</p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-gray-500 italic pl-1">No specific action items recorded.</p>
+                  <p className="text-xs text-gray-505 italic pl-1">No specific action items recorded.</p>
                 )}
               </div>
             </div>
           </>
         ) : (
           /* Full Transcript Tab */
-          <div className="space-y-4 animate-fade-in pb-12">
-            {formatTranscript(conversation.transcript).length > 0 ? (
-              formatTranscript(conversation.transcript).map((segment) => (
-                <div 
-                  key={segment.id}
-                  className="p-4 rounded-2xl bg-white/5 border border-white/5 shadow-inner flex items-start gap-3.5 group"
-                >
-                  <div className="w-8 h-8 rounded-full bg-violet-600/20 flex items-center justify-center shrink-0 mt-0.5 text-violet-400">
-                    <Mic className="w-4 h-4" />
+          isEditing ? (
+            /* Full Transcript EDIT View */
+            <div className="space-y-6 pb-12 animate-fade-in">
+              {/* Section 1: Dictation Summary */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                  <BookOpen className="w-4 h-4 text-violet-400" />
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Dictation Summary</h3>
+                </div>
+                <textarea
+                  value={editTransSummary}
+                  onChange={(e) => setEditTransSummary(e.target.value)}
+                  className="w-full h-24 bg-gray-900 border border-white/10 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-violet-500 resize-none leading-relaxed"
+                  placeholder="Summary of what you dictated..."
+                />
+              </div>
+
+              {/* Section 2: The Conversation */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                  <Mic className="w-4 h-4 text-violet-400" />
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">The Conversation (Spoken Transcript)</h3>
+                </div>
+                <textarea
+                  value={editTransConversation}
+                  onChange={(e) => setEditTransConversation(e.target.value)}
+                  className="w-full h-44 bg-gray-900 border border-white/10 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-violet-500 resize-none leading-relaxed"
+                  placeholder="Spoken conversation transcript..."
+                />
+              </div>
+
+              {/* Section 3: Dictated Takeaways */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                  <Star className="w-4 h-4 text-amber-400" />
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Dictated Takeaways</h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    {editTransTakeaways.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2.5 bg-gray-900 border border-white/10 rounded-xl px-4 py-2">
+                        <span className="text-xs font-mono font-bold text-violet-400">{idx + 1}.</span>
+                        <input
+                          type="text"
+                          value={item}
+                          onChange={(e) => handleTransTakeawayChange(idx, e.target.value)}
+                          className="flex-1 bg-transparent text-sm text-white focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTransTakeaway(idx)}
+                          className="text-red-400 hover:text-red-305 font-semibold px-2 py-0.5 text-xs"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span className="text-xs font-bold text-violet-400 uppercase tracking-wider">
-                        {segment.speaker}
-                      </span>
-                      
-                      <button
-                        onClick={() => handlePlayTts(segment.text, `transcript-segment-${segment.id}`)}
-                        disabled={isTtsLoading && activeTtsSection !== `transcript-segment-${segment.id}`}
-                        className={`p-1.5 rounded-lg border transition-all md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 ${
-                          activeTtsSection === `transcript-segment-${segment.id}`
-                            ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse md:opacity-100'
-                            : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
-                        }`}
-                        title="Speak segment"
-                      >
-                        {isTtsLoading && activeTtsSection === `transcript-segment-${segment.id}` ? (
-                          <RefreshCw className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Volume2 className="w-3 h-3" />
-                        )}
-                      </button>
-                    </div>
-                    
-                    <p className="text-sm text-gray-350 leading-relaxed font-sans">
-                      {segment.text}
-                    </p>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newTransTakeawayText}
+                      onChange={(e) => setNewTransTakeawayText(e.target.value)}
+                      placeholder="Add dictated takeaway point..."
+                      className="flex-1 bg-gray-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddTransTakeaway()}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddTransTakeaway}
+                      className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-sm font-semibold text-white transition-colors"
+                    >
+                      Add
+                    </button>
                   </div>
                 </div>
-              ))
-            ) : (
-              <p className="text-xs text-gray-500 italic pl-1 py-4">No speech transcript text recorded.</p>
-            )}
-          </div>
+              </div>
+
+              {/* Section 4: Dictated Things to Work On */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                  <ListChecks className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Dictated Things to Work On</h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    {editTransToWorkOn.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2 p-2 bg-gray-900 border border-white/10 rounded-xl text-sm">
+                        <input
+                          type="text"
+                          value={item}
+                          onChange={(e) => handleTransToWorkOnChange(idx, e.target.value)}
+                          className="flex-1 bg-transparent text-sm text-white focus:outline-none pl-2"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTransToWorkOn(idx)}
+                          className="text-red-400 hover:text-red-350 font-semibold px-2 py-0.5 text-xs"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newTransWorkOnText}
+                      onChange={(e) => setNewTransWorkOnText(e.target.value)}
+                      placeholder="Add dictated action item..."
+                      className="flex-1 bg-gray-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddTransToWorkOn()}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddTransToWorkOn}
+                      className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-sm font-semibold text-white transition-colors"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Full Transcript Tab DISPLAY View */
+            <div className="space-y-6 animate-fade-in pb-12">
+              {(() => {
+                const tsConv = conversation.transcriptStructured?.conversation ?? conversation.transcript ?? '';
+                const tsSummary = conversation.transcriptStructured?.summary ?? '';
+                const tsTakeaways = conversation.transcriptStructured?.takeaways ?? [];
+                const tsToWorkOn = conversation.transcriptStructured?.toWorkOn ?? [];
+
+                return (
+                  <>
+                    {/* 1. Summary */}
+                    {tsSummary && (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">Dictation Summary</h4>
+                          <button
+                            onClick={() => handlePlayTts(tsSummary, 'trans-summary')}
+                            disabled={isTtsLoading && activeTtsSection !== 'trans-summary'}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                              activeTtsSection === 'trans-summary'
+                                ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse'
+                                : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                            }`}
+                          >
+                            {isTtsLoading && activeTtsSection === 'trans-summary' ? (
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Volume2 className="w-3 h-3" />
+                            )}
+                            <span>{activeTtsSection === 'trans-summary' ? 'Speaking...' : 'Listen'}</span>
+                          </button>
+                        </div>
+                        <p className="text-sm text-gray-305 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/5 shadow-inner">
+                          {tsSummary}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 2. The Conversation */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">The Conversation</h4>
+                        <div className="flex items-center gap-2">
+                          {/* Copy Button */}
+                          <button
+                            onClick={() => handleCopyText(tsConv, 'trans-conv')}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border border-white/5 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                          >
+                            {copiedSection === 'trans-conv' ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span className="text-emerald-400">Copied!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
+
+                          {/* Edit Button */}
+                          <button
+                            onClick={() => {
+                              setIsEditingConvText(true);
+                              setTempConvText(tsConv);
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border border-white/5 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+
+                          {/* Listen Button */}
+                          <button
+                            onClick={() => handlePlayTts(tsConv, 'trans-conv')}
+                            disabled={isTtsLoading && activeTtsSection !== 'trans-conv'}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                              activeTtsSection === 'trans-conv'
+                                ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse'
+                                : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                            }`}
+                          >
+                            {isTtsLoading && activeTtsSection === 'trans-conv' ? (
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Volume2 className="w-3 h-3" />
+                            )}
+                            <span>{activeTtsSection === 'trans-conv' ? 'Speaking...' : 'Listen'}</span>
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {isEditingConvText ? (
+                        <div className="space-y-3">
+                          <textarea
+                            value={tempConvText}
+                            onChange={(e) => setTempConvText(e.target.value)}
+                            className="w-full h-44 bg-gray-900 border border-white/10 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-violet-500 resize-none leading-relaxed"
+                          />
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => setIsEditingConvText(false)}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-gray-400 hover:text-white text-xs font-semibold hover:bg-white/5 cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                              <span>Cancel</span>
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await handleSaveLocalConvText(tempConvText);
+                                setIsEditingConvText(false);
+                              }}
+                              className="flex items-center gap-1 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Save</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-305 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/5 shadow-inner whitespace-pre-line">
+                          {tsConv || <span className="text-xs text-gray-500 italic">No speech transcript text recorded.</span>}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* 3. Takeaways */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">Dictated Takeaways</h4>
+                        <button
+                          onClick={() => setShowAddTakeawayForm(true)}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border border-white/5 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add Item</span>
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {tsTakeaways.map((takeaway, idx) => (
+                          <div
+                            key={idx}
+                            className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 items-start text-sm shadow-inner group"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-violet-600/20 flex items-center justify-center shrink-0 mt-0.5">
+                              <span className="text-xs font-bold text-violet-400">{idx + 1}</span>
+                            </div>
+                            
+                            {editingTakeawayIndex === idx ? (
+                              <div className="flex-1 flex gap-2">
+                                <input
+                                  type="text"
+                                  value={tempTakeawayText}
+                                  onChange={(e) => setTempTakeawayText(e.target.value)}
+                                  className="flex-1 bg-gray-900 border border-white/10 rounded-lg px-3 py-1 text-sm text-white focus:outline-none focus:border-violet-500"
+                                  autoFocus
+                                  onKeyDown={async (e) => {
+                                    if (e.key === 'Enter') {
+                                      await handleSaveLocalTakeaway(idx, tempTakeawayText);
+                                      setEditingTakeawayIndex(null);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingTakeawayIndex(null);
+                                    }
+                                  }}
+                                />
+                                <button
+                                  onClick={async () => {
+                                    await handleSaveLocalTakeaway(idx, tempTakeawayText);
+                                    setEditingTakeawayIndex(null);
+                                  }}
+                                  className="p-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingTakeawayIndex(null)}
+                                  className="p-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-gray-305 leading-relaxed pt-0.5 flex-1">{takeaway}</p>
+                                
+                                <div className="shrink-0 flex items-center gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                  {/* Edit point button */}
+                                  <button
+                                    onClick={() => {
+                                      setEditingTakeawayIndex(idx);
+                                      setTempTakeawayText(takeaway);
+                                    }}
+                                    className="p-1.5 rounded-lg border border-white/5 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 cursor-pointer"
+                                    title="Edit point"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                  </button>
+
+                                  {/* Delete point button */}
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm("Delete this takeaway point?")) {
+                                        await handleRemoveLocalTakeaway(idx);
+                                      }
+                                    }}
+                                    className="p-1.5 rounded-lg border border-red-500/10 bg-red-500/5 text-red-450 hover:bg-red-500/20 cursor-pointer"
+                                    title="Delete point"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+
+                                  {/* Listen to point button */}
+                                  <button
+                                    onClick={() => handlePlayTts(takeaway, `trans-takeaway-${idx}`)}
+                                    disabled={isTtsLoading && activeTtsSection !== `trans-takeaway-${idx}`}
+                                    className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                      activeTtsSection === `trans-takeaway-${idx}`
+                                        ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse'
+                                        : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                                    }`}
+                                  >
+                                    {isTtsLoading && activeTtsSection === `trans-takeaway-${idx}` ? (
+                                      <RefreshCw className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <Volume2 className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+
+                        {tsTakeaways.length === 0 && !showAddTakeawayForm && (
+                          <p className="text-xs text-gray-500 italic pl-1">No dictated takeaways recorded.</p>
+                        )}
+
+                        {/* Add point form inline */}
+                        {showAddTakeawayForm && (
+                          <div className="flex gap-2 p-3 bg-gray-900 border border-white/5 rounded-2xl animate-fade-in">
+                            <input
+                              type="text"
+                              value={newLocalTakeaway}
+                              onChange={(e) => setNewLocalTakeaway(e.target.value)}
+                              placeholder="Type takeaway and press Add..."
+                              className="flex-1 bg-gray-955 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-violet-500"
+                              autoFocus
+                              onKeyDown={async (e) => {
+                                if (e.key === 'Enter') {
+                                  if (newLocalTakeaway.trim()) {
+                                    await handleAddLocalTakeaway(newLocalTakeaway);
+                                    setNewLocalTakeaway('');
+                                    setShowAddTakeawayForm(false);
+                                  }
+                                } else if (e.key === 'Escape') {
+                                  setShowAddTakeawayForm(false);
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={async () => {
+                                if (newLocalTakeaway.trim()) {
+                                  await handleAddLocalTakeaway(newLocalTakeaway);
+                                  setNewLocalTakeaway('');
+                                  setShowAddTakeawayForm(false);
+                                }
+                              }}
+                              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white cursor-pointer"
+                            >
+                              Add
+                            </button>
+                            <button
+                              onClick={() => {
+                                setNewLocalTakeaway('');
+                                setShowAddTakeawayForm(false);
+                              }}
+                              className="px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 4. Things to Work On */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">Dictated Things to Work On</h4>
+                        <button
+                          onClick={() => setShowAddWorkOnForm(true)}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border border-white/5 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add Item</span>
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {tsToWorkOn.map((work, idx) => (
+                          <div
+                            key={idx}
+                            className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 items-start text-sm shadow-inner group"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-violet-600/20 flex items-center justify-center shrink-0 mt-0.5">
+                              <span className="text-xs font-bold text-violet-400">{idx + 1}</span>
+                            </div>
+                            
+                            {editingWorkOnIndex === idx ? (
+                              <div className="flex-1 flex gap-2">
+                                <input
+                                  type="text"
+                                  value={tempWorkOnText}
+                                  onChange={(e) => setTempWorkOnText(e.target.value)}
+                                  className="flex-1 bg-gray-900 border border-white/10 rounded-lg px-3 py-1 text-sm text-white focus:outline-none focus:border-violet-500"
+                                  autoFocus
+                                  onKeyDown={async (e) => {
+                                    if (e.key === 'Enter') {
+                                      await handleSaveLocalWorkOn(idx, tempWorkOnText);
+                                      setEditingWorkOnIndex(null);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingWorkOnIndex(null);
+                                    }
+                                  }}
+                                />
+                                <button
+                                  onClick={async () => {
+                                    await handleSaveLocalWorkOn(idx, tempWorkOnText);
+                                    setEditingWorkOnIndex(null);
+                                  }}
+                                  className="p-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingWorkOnIndex(null)}
+                                  className="p-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-gray-355 leading-relaxed pt-0.5 flex-1">{work}</p>
+                                
+                                <div className="shrink-0 flex items-center gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                  {/* Edit point button */}
+                                  <button
+                                    onClick={() => {
+                                      setEditingWorkOnIndex(idx);
+                                      setTempWorkOnText(work);
+                                    }}
+                                    className="p-1.5 rounded-lg border border-white/5 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 cursor-pointer"
+                                    title="Edit point"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                  </button>
+
+                                  {/* Delete point button */}
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm("Delete this action item point?")) {
+                                        await handleRemoveLocalWorkOn(idx);
+                                      }
+                                    }}
+                                    className="p-1.5 rounded-lg border border-red-500/10 bg-red-500/5 text-red-405 hover:bg-red-500/20 cursor-pointer"
+                                    title="Delete point"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+
+                                  {/* Listen to point button */}
+                                  <button
+                                    onClick={() => handlePlayTts(work, `trans-work-${idx}`)}
+                                    disabled={isTtsLoading && activeTtsSection !== `trans-work-${idx}`}
+                                    className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                      activeTtsSection === `trans-work-${idx}`
+                                        ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse'
+                                        : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                                    }`}
+                                  >
+                                    {isTtsLoading && activeTtsSection === `trans-work-${idx}` ? (
+                                      <RefreshCw className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <Volume2 className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+
+                        {tsToWorkOn.length === 0 && !showAddWorkOnForm && (
+                          <p className="text-xs text-gray-500 italic pl-1">No dictated action items recorded.</p>
+                        )}
+
+                        {/* Add point form inline */}
+                        {showAddWorkOnForm && (
+                          <div className="flex gap-2 p-3 bg-gray-900 border border-white/5 rounded-2xl animate-fade-in">
+                            <input
+                              type="text"
+                              value={newLocalWorkOn}
+                              onChange={(e) => setNewLocalWorkOn(e.target.value)}
+                              placeholder="Type action item and press Add..."
+                              className="flex-1 bg-gray-955 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-violet-500"
+                              autoFocus
+                              onKeyDown={async (e) => {
+                                if (e.key === 'Enter') {
+                                  if (newLocalWorkOn.trim()) {
+                                    await handleAddLocalWorkOn(newLocalWorkOn);
+                                    setNewLocalWorkOn('');
+                                    setShowAddWorkOnForm(false);
+                                  }
+                                } else if (e.key === 'Escape') {
+                                  setShowAddWorkOnForm(false);
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={async () => {
+                                if (newLocalWorkOn.trim()) {
+                                  await handleAddLocalWorkOn(newLocalWorkOn);
+                                  setNewLocalWorkOn('');
+                                  setShowAddWorkOnForm(false);
+                                }
+                              }}
+                              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white cursor-pointer"
+                            >
+                              Add
+                            </button>
+                            <button
+                              onClick={() => {
+                                setNewLocalWorkOn('');
+                                setShowAddWorkOnForm(false);
+                              }}
+                              className="px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )
         )}
 
       </div>

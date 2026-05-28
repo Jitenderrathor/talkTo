@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Home, Plus, Mic, Calendar, ChevronRight, MicOff, MessageSquare, BookOpen, User } from 'lucide-react';
+import { Settings, Home, Plus, Mic, Calendar, ChevronRight, MicOff, MessageSquare, BookOpen, User, RefreshCw } from 'lucide-react';
 import CalendarStrip from '@/components/CalendarStrip';
 import SettingsModal from '@/components/SettingsModal';
 import RecordScreen from '@/components/RecordScreen';
@@ -15,12 +15,84 @@ export default function AppHome() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeDetailId, setActiveDetailId] = useState<string | null>(null);
   const [isRecordingOpen, setIsRecordingOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Global Tasks Board states
-  const [activeTab, setActiveTab] = useState<'feed' | 'tasks'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'tasks' | 'feedback'>('feed');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [newTaskText, setNewTaskText] = useState('');
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed'>('all');
+
+  // Feedback states
+  const [feedbackName, setFeedbackName] = useState('');
+  const [feedbackPhone, setFeedbackPhone] = useState('');
+  const [feedbackEmail, setFeedbackEmail] = useState('');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
+  const handleSendFeedback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFeedbackStatus('sending');
+    setFeedbackError(null);
+
+    const serviceId = localStorage.getItem('talkto_emailjs_service_id') || 'service_j3jgz6g';
+    const templateId = localStorage.getItem('talkto_emailjs_template_id') || 'template_ooplf43';
+    const publicKey = localStorage.getItem('talkto_emailjs_public_key') || 'fU7F-EkzL8hF1qNR9';
+
+    if (!serviceId || !templateId || !publicKey) {
+      console.log('EmailJS details not configured. Simulating email send... Details:', {
+        feedbackName,
+        feedbackPhone,
+        feedbackEmail,
+        feedbackMessage
+      });
+      
+      setTimeout(() => {
+        setFeedbackStatus('success');
+        setFeedbackName('');
+        setFeedbackPhone('');
+        setFeedbackEmail('');
+        setFeedbackMessage('');
+      }, 1500);
+      return;
+    }
+
+    try {
+      const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          service_id: serviceId,
+          template_id: templateId,
+          user_id: publicKey,
+          template_params: {
+            name: feedbackName,
+            email: feedbackEmail,
+            phone: feedbackPhone,
+            message: feedbackMessage
+          }
+        })
+      });
+
+      if (response.ok) {
+        setFeedbackStatus('success');
+        setFeedbackName('');
+        setFeedbackPhone('');
+        setFeedbackEmail('');
+        setFeedbackMessage('');
+      } else {
+        const errorText = await response.text();
+        throw new Error(errorText || `Failed (Status: ${response.status})`);
+      }
+    } catch (err: any) {
+      console.error('EmailJS feedback send failed:', err);
+      setFeedbackStatus('error');
+      setFeedbackError(err.message || 'Unknown error occurred.');
+    }
+  };
 
   // Initialize date to today on client side
   useEffect(() => {
@@ -30,6 +102,14 @@ export default function AppHome() {
     const day = String(today.getDate()).padStart(2, '0');
     setSelectedDate(`${year}-${month}-${day}`);
   }, []);
+
+  // Check admin session on mount and when Settings modal opens/closes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sessionAdmin = sessionStorage.getItem('talkto_admin_session') === 'true';
+      setIsAdmin(sessionAdmin);
+    }
+  }, [isSettingsOpen]);
 
   // Fetch conversations from DB
   const loadConversations = async () => {
@@ -129,13 +209,15 @@ export default function AppHome() {
             </h1>
           </div>
           
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
-            aria-label="Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+              aria-label="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
         </header>
 
         {/* Core Home Content */}
@@ -214,8 +296,17 @@ export default function AppHome() {
                   </div>
                 )}
               </div>
+              
+              {/* Floating Action Button for Recording */}
+              <button
+                onClick={() => setIsRecordingOpen(true)}
+                className="absolute bottom-24 right-6 w-14 h-14 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-600/30 flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-30 border border-violet-500/20 animate-fade-in"
+                aria-label="Record New Conversation"
+              >
+                <Mic className="w-6 h-6 stroke-[2.5]" />
+              </button>
             </>
-          ) : (
+          ) : activeTab === 'tasks' ? (
             /* Global Tasks List View */
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-5 pt-4">
               
@@ -340,7 +431,103 @@ export default function AppHome() {
                     </div>
                   </div>
                 )}
+              {/* End of Tasks Scroll Wrapper */}
               </div>
+            </div>
+          ) : (
+            /* Feedback Form View */
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-5 pt-4">
+              <div className="space-y-1.5 mb-4 shrink-0">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-violet-400">Share Feedback</h2>
+                <p className="text-xs text-gray-550">
+                  Suggest a feature, report an issue, or tell us how to improve.
+                </p>
+              </div>
+
+
+
+              <form 
+                onSubmit={handleSendFeedback} 
+                className="flex-1 flex flex-col min-h-0 overflow-y-auto space-y-4 pb-24"
+                style={{
+                  paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))',
+                }}
+              >
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-gray-400">Full Name</label>
+                  <input
+                    type="text"
+                    value={feedbackName}
+                    onChange={(e) => setFeedbackName(e.target.value)}
+                    placeholder="Enter your name"
+                    required
+                    className="w-full bg-gray-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-gray-400">Mobile Number</label>
+                  <input
+                    type="tel"
+                    value={feedbackPhone}
+                    onChange={(e) => setFeedbackPhone(e.target.value)}
+                    placeholder="Enter your mobile number"
+                    required
+                    className="w-full bg-gray-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-gray-400">Email ID</label>
+                  <input
+                    type="email"
+                    value={feedbackEmail}
+                    onChange={(e) => setFeedbackEmail(e.target.value)}
+                    placeholder="Enter your email ID"
+                    required
+                    className="w-full bg-gray-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-gray-400">Feature to Improve / Message</label>
+                  <textarea
+                    value={feedbackMessage}
+                    onChange={(e) => setFeedbackMessage(e.target.value)}
+                    placeholder="Describe the feature or improvement you want..."
+                    required
+                    rows={4}
+                    className="w-full bg-gray-900 border border-white/10 rounded-xl p-4 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors resize-none leading-relaxed"
+                  />
+                </div>
+
+                {feedbackStatus === 'success' && (
+                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-305 text-xs flex items-center gap-2 animate-scale-up">
+                    <span>✅ Feedback successfully submitted! Thank you.</span>
+                  </div>
+                )}
+
+                {feedbackStatus === 'error' && (
+                  <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-305 text-xs flex items-center gap-2 animate-scale-up">
+                    <span>❌ Submission failed: {feedbackError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={feedbackStatus === 'sending'}
+                  className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:bg-violet-800 text-white font-semibold text-xs transition-all shadow-lg shadow-violet-600/25 flex items-center justify-center gap-2"
+                >
+                  {feedbackStatus === 'sending' ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Feedback'
+                  )}
+                </button>
+              </form>
             </div>
           )}
         </div>
@@ -352,7 +539,6 @@ export default function AppHome() {
             paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',
           }}
         >
-          
           {/* Home Tab */}
           <button 
             onClick={() => setActiveTab('feed')}
@@ -364,15 +550,6 @@ export default function AppHome() {
             <span className="text-[10px] font-bold tracking-wider uppercase">Feed</span>
           </button>
           
-          {/* Record Action Plus Button (Floating in Notch/Middle) */}
-          <button
-            onClick={() => setIsRecordingOpen(true)}
-            className="flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-600/30 -translate-y-4 border-[4px] border-gray-950 transition-all hover:scale-105 active:scale-95 z-30"
-            aria-label="Record New Conversation"
-          >
-            <Plus className="w-7 h-7 stroke-[2.5]" />
-          </button>
-
           {/* Tasks Tab */}
           <button 
             onClick={() => setActiveTab('tasks')}
@@ -384,6 +561,16 @@ export default function AppHome() {
             <span className="text-[10px] font-bold tracking-wider uppercase">To Work On</span>
           </button>
 
+          {/* Feedback Tab */}
+          <button 
+            onClick={() => setActiveTab('feedback')}
+            className={`flex flex-col items-center gap-1 transition-all ${
+              activeTab === 'feedback' ? 'text-violet-400 animate-pulse' : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <MessageSquare className="w-5 h-5" />
+            <span className="text-[10px] font-bold tracking-wider uppercase">Feedback</span>
+          </button>
         </div>
 
         {/* Settings Modal */}

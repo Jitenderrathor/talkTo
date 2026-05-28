@@ -11,6 +11,12 @@ export interface ConversationMetadata {
     takeaways: string[];
     toWorkOn: string[];
   };
+  transcriptStructured?: {
+    summary: string;
+    conversation: string;
+    takeaways: string[];
+    toWorkOn: string[];
+  };
   duration?: number;  // Duration in seconds
 }
 
