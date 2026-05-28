@@ -18,6 +18,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
   const [duration, setDuration] = useState(0);
   const [transcript, setTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lang, setLang] = useState('en-US');
   
   // Custom manual typing fallback if Speech API is unavailable/blocked
   const [showTextFallback, setShowTextFallback] = useState(false);
@@ -33,13 +34,24 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
   const recognitionRef = useRef<any>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Clean up on unmount
+  // Clean up on unmount and load language preference
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedLang = localStorage.getItem('talkto_transcription_lang') || 'en-US';
+      setLang(savedLang);
+    }
     return () => {
       stopTimer();
       cleanupMedia();
     };
   }, []);
+
+  const handleLanguageChange = (newLang: string) => {
+    setLang(newLang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('talkto_transcription_lang', newLang);
+    }
+  };
 
   const startTimer = () => {
     setDuration(0);
@@ -98,7 +110,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = 'en-US';
+        recognition.lang = lang;
 
         recognition.onresult = (event: any) => {
           let interimTranscript = '';
@@ -234,7 +246,11 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
       if (audioBlob && groqApiKey) {
         setProcessingStep('Transcribing audio with Groq Whisper...');
         try {
-          const transcribedText = await transcribeSpeech(audioBlob, groqApiKey);
+          let whisperLang = undefined;
+          if (lang === 'hi-IN') whisperLang = 'hi';
+          else if (lang === 'en-US') whisperLang = 'en';
+
+          const transcribedText = await transcribeSpeech(audioBlob, groqApiKey, whisperLang);
           if (transcribedText.trim()) {
             finalTranscript = transcribedText.trim();
             // Update local transcript state so it displays correctly
@@ -245,9 +261,13 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
         }
       }
 
-      // If no speech transcript is recorded/provided, use a demo text preset
+      // Prevent silent defaults - throw error if real recording is empty
       if (!finalTranscript.trim()) {
-        finalTranscript = "Hello, I wanted to say there was a quick sync where we aligned on the mobile app design and the primary takeaways were that we need to use Next.js, IndexedDB for local storage, and the design needs to feel premium. I need to work on writing the components today.";
+        if (!textToProcess) {
+          throw new Error('No speech detected. Please try recording again and make sure to speak clearly near the microphone.');
+        } else {
+          throw new Error('Transcription failed. No text could be extracted.');
+        }
       }
 
       // 2. Structure the final transcript using selected AI provider
@@ -297,9 +317,9 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
 
       // Transition to Detail View
       onFinished(conversationId);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to structure conversation:', err);
-      setErrorMessage('Failed to process recording with AI. Please check your API keys and try again.');
+      setErrorMessage(err.message || 'Failed to process recording with AI. Please check your API keys and try again.');
       setIsProcessing(false);
     }
   };
@@ -327,8 +347,8 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
     <div 
       className="absolute inset-0 z-40 bg-gray-950 flex flex-col justify-between px-6 animate-fade-in"
       style={{
-        paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))',
-        paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))',
+        paddingTop: 'calc(2.5rem + env(safe-area-inset-top, 0px))',
+        paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))',
       }}
     >
       {/* Top Header */}
@@ -427,6 +447,34 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
           /* Mic / Speaker Recording View */
           <div className="flex flex-col items-center space-y-8 w-full max-w-sm">
             
+            {/* Language Selector Selector */}
+            <div className="flex gap-2 bg-white/5 p-1 rounded-2xl border border-white/5 shrink-0 z-20">
+              <button
+                type="button"
+                onClick={() => handleLanguageChange('en-US')}
+                disabled={isRecording || isProcessing}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  lang === 'en-US'
+                    ? 'bg-violet-600 text-white shadow-md shadow-violet-600/10'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                } disabled:opacity-50`}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLanguageChange('hi-IN')}
+                disabled={isRecording || isProcessing}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  lang === 'hi-IN'
+                    ? 'bg-violet-600 text-white shadow-md shadow-violet-600/10'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                } disabled:opacity-50`}
+              >
+                Hindi (हिंदी)
+              </button>
+            </div>
+
             {/* Siri-like Wave Animation when recording */}
             <div className="relative flex items-center justify-center w-48 h-48">
               {isRecording && (

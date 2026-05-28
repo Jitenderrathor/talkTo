@@ -38,10 +38,10 @@ export default function AppTour({ isOpen, onClose }: AppTourProps) {
     },
     {
       title: "Advanced AI Structuring",
-      description: "Once your audio is recorded, our AI automatically translates, transcribes, and structures your speech. It creates a concise title, summarizes the conversation, highlights 3 key takeaways, and lists action items in seconds.",
+      description: "Once your audio is recorded, our AI automatically transcribes and structures your speech: generating a title, summary, key takeaways, and action items. You can edit any section or click the 'Copy Notes' button in the header to copy the complete formatted details instantly.",
       icon: <Sparkles className="w-10 h-10 text-indigo-400" />,
       badge: "Intelligent Summaries",
-      highlightText: "AI processing transcribes, summarizes, and extracts key takeaways instantly."
+      highlightText: "Use the 'Copy Notes' button in the details view to copy structured reports instantly."
     },
     {
       title: "Smart Task Board ('To Work On')",

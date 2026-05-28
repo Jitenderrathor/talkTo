@@ -3,13 +3,16 @@ import { AIStructuredNoteResponse } from './gemini';
 /**
  * Transcribe recorded speech audio using Groq's Whisper API.
  */
-export async function transcribeSpeech(audioBlob: Blob, apiKey: string): Promise<string> {
+export async function transcribeSpeech(audioBlob: Blob, apiKey: string, language?: string): Promise<string> {
   const formData = new FormData();
   
   // Audio blob needs to be appended as a file with a valid extension (e.g., webm)
   const filename = (audioBlob as any).name || 'recording.webm';
   formData.append('file', audioBlob, filename);
   formData.append('apiKey', apiKey);
+  if (language) {
+    formData.append('language', language);
+  }
 
   const response = await fetch('/api/transcribe', {
     method: 'POST',

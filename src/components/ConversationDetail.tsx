@@ -52,6 +52,54 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
       setCopiedSection(null);
     }, 1500);
   };
+
+  const [copiedNotes, setCopiedNotes] = useState(false);
+
+  const handleCopyCompleteNotes = () => {
+    if (!conversation) return;
+
+    const tsConv = conversation.transcriptStructured?.conversation ?? conversation.transcript ?? '';
+    const tsSummary = conversation.transcriptStructured?.summary ?? '';
+    const tsTakeaways = conversation.transcriptStructured?.takeaways ?? [];
+    const tsToWorkOn = conversation.transcriptStructured?.toWorkOn ?? [];
+
+    const dateStr = new Date(conversation.timestamp).toLocaleString();
+
+    let text = `=== ${conversation.title.toUpperCase()} ===\n`;
+    text += `Date: ${dateStr}\n\n`;
+
+    if (tsSummary) {
+      text += `--- CONVERSATION SUMMARY ---\n${tsSummary}\n\n`;
+    }
+
+    if (tsConv) {
+      text += `--- TRANSCRIPT ---\n${tsConv}\n\n`;
+    }
+
+    if (tsTakeaways.length > 0) {
+      text += `--- KEY TAKEAWAYS ---\n`;
+      tsTakeaways.forEach((item, idx) => {
+        text += `${idx + 1}. ${item}\n`;
+      });
+      text += `\n`;
+    }
+
+    if (tsToWorkOn.length > 0) {
+      text += `--- ACTION ITEMS / TASKS ---\n`;
+      tsToWorkOn.forEach((item) => {
+        text += `- ${item}\n`;
+      });
+      text += `\n`;
+    }
+
+    text += `==========================`;
+
+    navigator.clipboard.writeText(text);
+    setCopiedNotes(true);
+    setTimeout(() => {
+      setCopiedNotes(false);
+    }, 2000);
+  };
   
   // Audio Playback states
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -63,8 +111,8 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressIntervalRef = useRef<number | null>(null);
 
-  // Tab control (AI Notes vs Full Transcript)
-  const [activeTab, setActiveTab] = useState<'notes' | 'transcript'>('notes');
+  // Tab control (Default to transcript and hide notes)
+  const [activeTab, setActiveTab] = useState<'notes' | 'transcript'>('transcript');
 
   // Groq Text-to-Speech states
   const [activeTtsSection, setActiveTtsSection] = useState<string | null>(null);
@@ -574,7 +622,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
       <div 
         className="flex items-center justify-between px-5 pb-5 border-b border-white/5 shrink-0"
         style={{
-          paddingTop: 'calc(1.25rem + env(safe-area-inset-top, 0px))',
+          paddingTop: 'calc(2.5rem + env(safe-area-inset-top, 0px))',
         }}
       >
         <button
@@ -586,6 +634,29 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
         </button>
 
         <div className="flex items-center gap-2">
+          {!isEditing && (
+            <button
+              onClick={handleCopyCompleteNotes}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                copiedNotes
+                  ? 'bg-emerald-600/20 border-emerald-500 text-emerald-400'
+                  : 'bg-white/5 border-white/5 text-gray-300 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              {copiedNotes ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Copied Notes!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Notes</span>
+                </>
+              )}
+            </button>
+          )}
+
           {isEditing ? (
             <button
               onClick={handleSave}
@@ -700,29 +771,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
 
         {/* Section 1: Conversation Context / Summary */}
         {/* Tab Switcher */}
-        {/* Tab Switcher */}
-        <div className="flex border-b border-white/5 mb-6 shrink-0">
-          <button
-            onClick={() => setActiveTab('notes')}
-            className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
-              activeTab === 'notes'
-                ? 'border-violet-500 text-violet-400 bg-white/5'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            AI Notes {isEditing && <span className="text-[10px] text-gray-500 font-mono">(Edit)</span>}
-          </button>
-          <button
-            onClick={() => setActiveTab('transcript')}
-            className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
-              activeTab === 'transcript'
-                ? 'border-violet-500 text-violet-400 bg-white/5'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            Full Transcript {isEditing && <span className="text-[10px] text-gray-500 font-mono">(Edit)</span>}
-          </button>
-        </div>
+        {/* Tab Switcher Hidden - Verbatim Transcript is the only view */}
 
         {activeTab === 'notes' ? (
           <>
@@ -733,24 +782,6 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                   <BookOpen className="w-4 h-4 text-violet-400" />
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Conversation Details</h3>
                 </div>
-                {!isEditing && (
-                  <button
-                    onClick={() => handlePlayTts(conversation.structured.summary, 'summary')}
-                    disabled={isTtsLoading && activeTtsSection !== 'summary'}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                      activeTtsSection === 'summary'
-                        ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse'
-                        : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    {isTtsLoading && activeTtsSection === 'summary' ? (
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Volume2 className="w-3 h-3" />
-                    )}
-                    <span>{activeTtsSection === 'summary' ? 'Speaking...' : 'Listen'}</span>
-                  </button>
-                )}
               </div>
 
               {isEditing ? (
@@ -828,23 +859,6 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                         <span className="text-xs font-bold text-violet-400">{idx + 1}</span>
                       </div>
                       <p className="text-gray-305 leading-relaxed pt-0.5 flex-1">{takeaway}</p>
-                      
-                      <button
-                        onClick={() => handlePlayTts(takeaway, `takeaway-${idx}`)}
-                        disabled={isTtsLoading && activeTtsSection !== `takeaway-${idx}`}
-                        className={`shrink-0 p-1.5 rounded-lg border transition-all md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 ${
-                          activeTtsSection === `takeaway-${idx}`
-                            ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse md:opacity-100'
-                            : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
-                        }`}
-                        title="Speak takeaway"
-                      >
-                        {isTtsLoading && activeTtsSection === `takeaway-${idx}` ? (
-                          <RefreshCw className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Volume2 className="w-3 h-3" />
-                        )}
-                      </button>
                     </div>
                   ))
                 )}
@@ -926,11 +940,11 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
           isEditing ? (
             /* Full Transcript EDIT View */
             <div className="space-y-6 pb-12 animate-fade-in">
-              {/* Section 1: Dictation Summary */}
+              {/* Section 1: Conversation Summary */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 border-b border-white/5 pb-2">
                   <BookOpen className="w-4 h-4 text-violet-400" />
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Dictation Summary</h3>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Conversation Summary</h3>
                 </div>
                 <textarea
                   value={editTransSummary}
@@ -940,11 +954,11 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                 />
               </div>
 
-              {/* Section 2: The Conversation */}
+              {/* Section 2: Spoken Transcript */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 border-b border-white/5 pb-2">
                   <Mic className="w-4 h-4 text-violet-400" />
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">The Conversation (Spoken Transcript)</h3>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Transcript</h3>
                 </div>
                 <textarea
                   value={editTransConversation}
@@ -954,11 +968,11 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                 />
               </div>
 
-              {/* Section 3: Dictated Takeaways */}
+              {/* Section 3: Key Takeaways */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 border-b border-white/5 pb-2">
                   <Star className="w-4 h-4 text-amber-400" />
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Dictated Takeaways</h3>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Takeaways</h3>
                 </div>
                 <div className="space-y-3">
                   <div className="space-y-2">
@@ -1002,11 +1016,11 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                 </div>
               </div>
 
-              {/* Section 4: Dictated Things to Work On */}
+              {/* Section 4: Action Items / Tasks to Work On */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 border-b border-white/5 pb-2">
                   <ListChecks className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Dictated Things to Work On</h3>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Action Items / Tasks to Work On</h3>
                 </div>
                 <div className="space-y-3">
                   <div className="space-y-2">
@@ -1064,23 +1078,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                     {tsSummary && (
                       <div className="space-y-2.5">
                         <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">Dictation Summary</h4>
-                          <button
-                            onClick={() => handlePlayTts(tsSummary, 'trans-summary')}
-                            disabled={isTtsLoading && activeTtsSection !== 'trans-summary'}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                              activeTtsSection === 'trans-summary'
-                                ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse'
-                                : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
-                            }`}
-                          >
-                            {isTtsLoading && activeTtsSection === 'trans-summary' ? (
-                              <RefreshCw className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Volume2 className="w-3 h-3" />
-                            )}
-                            <span>{activeTtsSection === 'trans-summary' ? 'Speaking...' : 'Listen'}</span>
-                          </button>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">Conversation Summary</h4>
                         </div>
                         <p className="text-sm text-gray-305 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/5 shadow-inner">
                           {tsSummary}
@@ -1091,7 +1089,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                     {/* 2. The Conversation */}
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">The Conversation</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">Transcript</h4>
                         <div className="flex items-center gap-2">
                           {/* Copy Button */}
                           <button
@@ -1121,24 +1119,6 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                           >
                             <Edit2 className="w-3 h-3" />
                             <span>Edit</span>
-                          </button>
-
-                          {/* Listen Button */}
-                          <button
-                            onClick={() => handlePlayTts(tsConv, 'trans-conv')}
-                            disabled={isTtsLoading && activeTtsSection !== 'trans-conv'}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                              activeTtsSection === 'trans-conv'
-                                ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse'
-                                : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
-                            }`}
-                          >
-                            {isTtsLoading && activeTtsSection === 'trans-conv' ? (
-                              <RefreshCw className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Volume2 className="w-3 h-3" />
-                            )}
-                            <span>{activeTtsSection === 'trans-conv' ? 'Speaking...' : 'Listen'}</span>
                           </button>
                         </div>
                       </div>
@@ -1180,7 +1160,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                     {/* 3. Takeaways */}
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">Dictated Takeaways</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">Takeaways</h4>
                         <button
                           onClick={() => setShowAddTakeawayForm(true)}
                           className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border border-white/5 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
@@ -1262,23 +1242,6 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                                   >
                                     <Trash2 className="w-3 h-3" />
                                   </button>
-
-                                  {/* Listen to point button */}
-                                  <button
-                                    onClick={() => handlePlayTts(takeaway, `trans-takeaway-${idx}`)}
-                                    disabled={isTtsLoading && activeTtsSection !== `trans-takeaway-${idx}`}
-                                    className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                      activeTtsSection === `trans-takeaway-${idx}`
-                                        ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse'
-                                        : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
-                                    }`}
-                                  >
-                                    {isTtsLoading && activeTtsSection === `trans-takeaway-${idx}` ? (
-                                      <RefreshCw className="w-3 h-3 animate-spin" />
-                                    ) : (
-                                      <Volume2 className="w-3 h-3" />
-                                    )}
-                                  </button>
                                 </div>
                               </>
                             )}
@@ -1297,7 +1260,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                               value={newLocalTakeaway}
                               onChange={(e) => setNewLocalTakeaway(e.target.value)}
                               placeholder="Type takeaway and press Add..."
-                              className="flex-1 bg-gray-955 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-violet-500"
+                              className="flex-1 bg-gray-950 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-violet-500"
                               autoFocus
                               onKeyDown={async (e) => {
                                 if (e.key === 'Enter') {
@@ -1340,7 +1303,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                     {/* 4. Things to Work On */}
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">Dictated Things to Work On</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-violet-400">Action Items / Tasks to Work On</h4>
                         <button
                           onClick={() => setShowAddWorkOnForm(true)}
                           className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border border-white/5 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
@@ -1422,23 +1385,6 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                                   >
                                     <Trash2 className="w-3 h-3" />
                                   </button>
-
-                                  {/* Listen to point button */}
-                                  <button
-                                    onClick={() => handlePlayTts(work, `trans-work-${idx}`)}
-                                    disabled={isTtsLoading && activeTtsSection !== `trans-work-${idx}`}
-                                    className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                      activeTtsSection === `trans-work-${idx}`
-                                        ? 'bg-violet-600/20 border-violet-500 text-violet-300 animate-pulse'
-                                        : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10'
-                                    }`}
-                                  >
-                                    {isTtsLoading && activeTtsSection === `trans-work-${idx}` ? (
-                                      <RefreshCw className="w-3 h-3 animate-spin" />
-                                    ) : (
-                                      <Volume2 className="w-3 h-3" />
-                                    )}
-                                  </button>
                                 </div>
                               </>
                             )}
@@ -1457,7 +1403,7 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
                               value={newLocalWorkOn}
                               onChange={(e) => setNewLocalWorkOn(e.target.value)}
                               placeholder="Type action item and press Add..."
-                              className="flex-1 bg-gray-955 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-violet-500"
+                              className="flex-1 bg-gray-950 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-violet-500"
                               autoFocus
                               onKeyDown={async (e) => {
                                 if (e.key === 'Enter') {

@@ -11,6 +11,7 @@ interface SettingsModalProps {
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [aiProvider, setAiProvider] = useState('groq');
   const [ttsVoice, setTtsVoice] = useState('diana');
+  const [transcriptionLang, setTranscriptionLang] = useState('en-US');
   const [isSaved, setIsSaved] = useState(false);
 
   // EmailJS configuration states
@@ -51,6 +52,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       const savedGeminiKey = localStorage.getItem('talkto_gemini_api_key') || '';
       setGeminiApiKey(savedGeminiKey);
 
+      const savedLang = localStorage.getItem('talkto_transcription_lang') || 'en-US';
+      setTranscriptionLang(savedLang);
+
       const sessionAdmin = sessionStorage.getItem('talkto_admin_session') === 'true';
       setIsAdmin(sessionAdmin);
     }
@@ -88,6 +92,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       localStorage.setItem('talkto_emailjs_public_key', emailJsPublicKey);
       localStorage.setItem('talkto_groq_api_key', groqApiKey);
       localStorage.setItem('talkto_gemini_api_key', geminiApiKey);
+      localStorage.setItem('talkto_transcription_lang', transcriptionLang);
       setIsSaved(true);
       setTimeout(() => {
         setIsSaved(false);
@@ -99,6 +104,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const handleReset = () => {
     setAiProvider('groq');
     setTtsVoice('diana');
+    setTranscriptionLang('en-US');
     setEmailJsServiceId('');
     setEmailJsTemplateId('');
     setEmailJsPublicKey('');
@@ -107,6 +113,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (typeof window !== 'undefined') {
       localStorage.setItem('talkto_ai_provider', 'groq');
       localStorage.setItem('talkto_tts_voice', 'diana');
+      localStorage.setItem('talkto_transcription_lang', 'en-US');
       localStorage.setItem('talkto_emailjs_service_id', '');
       localStorage.setItem('talkto_emailjs_template_id', '');
       localStorage.setItem('talkto_emailjs_public_key', '');
@@ -249,6 +256,23 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </select>
               </div>
 
+              {/* Speech to Text Language Selection */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-1.5 font-medium text-gray-200">
+                  <Volume2 className="w-4 h-4 text-violet-400" />
+                  <span>Preferred Recording Language</span>
+                </label>
+                <select
+                  value={transcriptionLang}
+                  onChange={(e) => setTranscriptionLang(e.target.value)}
+                  className="w-full py-3 px-4 rounded-xl bg-gray-900/80 border border-white/10 text-white focus:outline-none focus:border-violet-500/50 transition-colors cursor-pointer"
+                >
+                  <option value="en-US" className="bg-gray-950">English (US)</option>
+                  <option value="hi-IN" className="bg-gray-950">Hindi (हिंदी)</option>
+                  <option value="auto" className="bg-gray-950">Auto-Detect (Groq Only)</option>
+                </select>
+              </div>
+
               {/* Secret API Keys (Admin Only) */}
               <div className="p-4 rounded-xl bg-violet-600/10 border border-violet-500/20 space-y-3">
                 <div className="flex items-center gap-2 pb-1 border-b border-white/5">
@@ -264,7 +288,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       value={groqApiKey}
                       onChange={(e) => setGroqApiKey(e.target.value)}
                       placeholder="e.g. gsk_xxxxxxxxxxxxxxxxxxxx"
-                      className="w-full bg-gray-955 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50"
+                      className="w-full bg-gray-950 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50"
                     />
                   </div>
 
@@ -275,7 +299,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       value={geminiApiKey}
                       onChange={(e) => setGeminiApiKey(e.target.value)}
                       placeholder="e.g. AIzaSyxxxxxxxxxxxxxxxxxxxx"
-                      className="w-full bg-gray-955 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50"
+                      className="w-full bg-gray-950 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50"
                     />
                   </div>
                 </div>
@@ -318,7 +342,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       value={emailJsPublicKey}
                       onChange={(e) => setEmailJsPublicKey(e.target.value)}
                       placeholder="e.g. xxxxxxx_xxxxxxxxxx"
-                      className="w-full bg-gray-955 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50"
+                      className="w-full bg-gray-950 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50"
                     />
                   </div>
                 </div>
@@ -337,7 +361,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-gray-955/60 border border-white/5 space-y-2">
+              <div className="p-4 rounded-xl bg-gray-950/60 border border-white/5 space-y-2">
                 <div className="flex items-start gap-2">
                   <HelpCircle className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
                   <div>

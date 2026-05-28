@@ -113,8 +113,9 @@ export async function saveConversation(
     // Keep other tasks
     const otherTasks = globalTasks.filter(t => t.conversationId !== conversation.id);
 
-    // Generate new tasks from the conversation's toWorkOn list, preserving checked status if the text matches!
-    const newTasks: TaskItem[] = conversation.structured.toWorkOn.map((item, idx) => ({
+    // Generate new tasks from the conversation's dictated toWorkOn list, preserving checked status if the text matches!
+    const workOnList = conversation.transcriptStructured?.toWorkOn || conversation.structured.toWorkOn || [];
+    const newTasks: TaskItem[] = workOnList.map((item, idx) => ({
       id: `${conversation.id}_task_${idx}`,
       text: item.trim(),
       completed: completedTaskTexts.has(item.trim()),

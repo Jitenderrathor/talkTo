@@ -87,8 +87,8 @@ const manualSections = [
         a: 'Verify your internet connection. If the default AI backend keys are rate-limited, processing may temporarily fail.'
       },
       {
-        q: 'Can I listen to my summaries?',
-        a: 'Yes! Inside the conversation detail view under the AI Notes tab, click the "Listen" button to hear a Text-to-Speech narration of the summary.'
+        q: 'Can I copy the complete conversation notes?',
+        a: 'Yes! Inside the conversation detail view, click the "Copy Notes" button in the header. This will instantly format and copy the title, summary, transcript, takeaways, and action items directly to your clipboard.'
       },
       {
         q: 'How do I clear all data?',
@@ -339,7 +339,12 @@ export default function AppHome() {
         />
 
         {/* Header Bar */}
-        <header className="px-5 pt-8 pb-4 bg-gray-900/20 border-b border-white/5 flex items-center justify-between shrink-0">
+        <header 
+          className="px-5 pb-4 bg-gray-900/20 border-b border-white/5 flex items-center justify-between shrink-0"
+          style={{
+            paddingTop: 'calc(2.5rem + env(safe-area-inset-top, 0px))',
+          }}
+        >
           <div className="flex flex-col">
             <span className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">My Assistant</span>
             <h1 className="text-2xl font-extrabold bg-gradient-to-r from-violet-400 via-indigo-300 to-violet-500 bg-clip-text text-transparent">
@@ -409,7 +414,7 @@ export default function AppHome() {
                           </h3>
                           
                           <p className="text-xs text-gray-400 line-clamp-1 leading-relaxed">
-                            {item.structured.summary}
+                            {item.transcriptStructured?.summary || item.structured.summary}
                           </p>
                         </div>
 
@@ -438,7 +443,10 @@ export default function AppHome() {
               {/* Floating Action Button for Recording */}
               <button
                 onClick={() => setIsRecordingOpen(true)}
-                className="absolute bottom-24 right-6 w-14 h-14 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-600/30 flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-30 border border-violet-500/20 animate-fade-in"
+                className="absolute right-6 w-14 h-14 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-600/30 flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-30 border border-violet-500/20 animate-fade-in"
+                style={{
+                  bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))',
+                }}
                 aria-label="Record New Conversation"
               >
                 <Mic className="w-6 h-6 stroke-[2.5]" />
@@ -1010,7 +1018,7 @@ export default function AppHome() {
         <div 
           className="absolute bottom-0 left-0 right-0 glass-dark px-4 pt-4 flex items-center justify-between gap-1 z-20"
           style={{
-            paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',
+            paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))',
           }}
         >
           {/* Home Tab */}
