@@ -1,13 +1,102 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Home, Plus, Mic, Calendar, ChevronRight, MicOff, MessageSquare, BookOpen, User, RefreshCw, StickyNote, Trash2, Edit2, Check, X } from 'lucide-react';
+import { Settings, Home, Plus, Mic, Calendar, ChevronRight, MicOff, MessageSquare, BookOpen, User, RefreshCw, StickyNote, Trash2, Edit2, Check, X, Sparkles, HelpCircle } from 'lucide-react';
 import CalendarStrip from '@/components/CalendarStrip';
 import SettingsModal from '@/components/SettingsModal';
 import RecordScreen from '@/components/RecordScreen';
 import ConversationDetail from '@/components/ConversationDetail';
+import AppTour from '@/components/AppTour';
 import { getConversationsMetadata, ConversationMetadata, TaskItem, getGlobalTasks, addGlobalTask, toggleGlobalTask, deleteGlobalTask, WorkingNote, getWorkingNotes, addWorkingNote, updateWorkingNote, deleteWorkingNote } from '@/lib/db';
 import { ListChecks } from 'lucide-react';
+
+const manualSections = [
+  {
+    id: 'get-started',
+    title: '🚀 Getting Started',
+    icon: <Sparkles className="w-4 h-4 text-violet-400" />,
+    content: 'TalkTo is a voice-first workspace that automatically converts spoken audio into actionable takeaways and tasks using AI.',
+    steps: [
+      'Tap the bottom Feed tab, then tap the floating microphone button on the bottom right.',
+      'Choose whether to record audio from your mic, upload an audio file, or use the Speech Simulator (perfect for quick testing).',
+      'Once complete, wait a few seconds as the AI models (Gemini/Groq) transcribe, summarize, and extract items.',
+      'View the generated AI notes, key takeaways, and structured action items.'
+    ]
+  },
+  {
+    id: 'recording',
+    title: '🎙️ Recording & Audio Options',
+    icon: <Mic className="w-4 h-4 text-violet-400" />,
+    content: 'TalkTo supports multiple input channels to accommodate different workflows:',
+    faq: [
+      {
+        q: 'How do I grant microphone permissions?',
+        a: 'Your browser will prompt you for microphone permissions the first time you record. If denied, you can re-enable it in your browser settings (look for the lock icon in the URL bar).'
+      },
+      {
+        q: 'What is the Speech Simulator?',
+        a: 'The Simulator is designed for quick testing without using a microphone. It uses pre-defined mock transcripts (e.g. design, marketing, or dev updates) to demonstrate the AI structuring capabilities immediately.'
+      },
+      {
+        q: 'Can I upload files directly?',
+        a: 'Yes! Tap "Upload Audio" on the recording screen to upload pre-recorded MP3, WAV, or M4A files from your device.'
+      }
+    ]
+  },
+  {
+    id: 'tasks',
+    title: '📋 Task Management Board',
+    icon: <ListChecks className="w-4 h-4 text-violet-400" />,
+    content: 'TalkTo keeps you organized by automatically pulling action items from your transcripts:',
+    steps: [
+      'When speech is structured, any item listed in "Action Items" is automatically added to your To Work On board.',
+      'Tap the checkmark next to a task to toggle its completed state.',
+      'You can also add custom task notes manually using the input form at the top of the To Work On board.'
+    ]
+  },
+  {
+    id: 'notes',
+    title: '📝 Manual Notes Scratchpad',
+    icon: <StickyNote className="w-4 h-4 text-violet-400" />,
+    content: 'For thoughts, meeting summaries, or details that do not come from voice recordings:',
+    steps: [
+      'Tap the Notes tab, and click "New Note" at the top.',
+      'Enter a title and write down your thoughts or custom pointers.',
+      'Tap "Save Note" to store it securely in IndexedDB.',
+      'You can edit or delete notes at any time using the edit/trash icons.'
+    ]
+  },
+  {
+    id: 'feedback',
+    title: '📬 Feedback & Suggestions',
+    icon: <MessageSquare className="w-4 h-4 text-violet-400" />,
+    content: 'All your recording data is stored strictly locally in your browser. The feedback submission feature is designed purely for reference to request new features or suggest improvements to the developer.',
+  },
+  {
+    id: 'troubleshooting',
+    title: '❓ Troubleshooting & FAQs',
+    icon: <HelpCircle className="w-4 h-4 text-violet-400" />,
+    content: 'Stuck? Here are solutions to common problems:',
+    faq: [
+      {
+        q: 'Are my conversations private?',
+        a: 'Yes. TalkTo stores your titles, transcripts, and audio blobs entirely inside your browser (IndexedDB). No backend servers store your data permanently.'
+      },
+      {
+        q: 'Why does AI structuring fail?',
+        a: 'Verify your internet connection. If the default AI backend keys are rate-limited, processing may temporarily fail.'
+      },
+      {
+        q: 'Can I listen to my summaries?',
+        a: 'Yes! Inside the conversation detail view under the AI Notes tab, click the "Listen" button to hear a Text-to-Speech narration of the summary.'
+      },
+      {
+        q: 'How do I clear all data?',
+        a: 'You can clear all application data and conversations by clearing the site cache or IndexedDB storage in your browser settings.'
+      }
+    ]
+  }
+];
 
 export default function AppHome() {
   const [selectedDate, setSelectedDate] = useState('');
@@ -18,10 +107,17 @@ export default function AppHome() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Global Tasks Board states
-  const [activeTab, setActiveTab] = useState<'feed' | 'tasks' | 'notes' | 'feedback'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'tasks' | 'notes' | 'manual' | 'feedback'>('feed');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [newTaskText, setNewTaskText] = useState('');
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed'>('all');
+
+  // User Manual and App Tour states
+  const [isTourOpen, setIsTourOpen] = useState(false);
+  const [manualSearchQuery, setManualSearchQuery] = useState('');
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    'get-started': true,
+  });
 
   // Working Notes states
   const [notes, setNotes] = useState<WorkingNote[]>([]);
@@ -103,13 +199,20 @@ export default function AppHome() {
     }
   };
 
-  // Initialize date to today on client side
+  // Initialize date to today and check onboarding tour on mount
   useEffect(() => {
     const today = new Date();
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
     setSelectedDate(`${year}-${month}-${day}`);
+
+    if (typeof window !== 'undefined') {
+      const tourCompleted = localStorage.getItem('talkto_onboarding_completed') === 'true';
+      if (!tourCompleted) {
+        setIsTourOpen(true);
+      }
+    }
   }, []);
 
   // Check admin session on mount and when Settings modal opens/closes
@@ -173,6 +276,19 @@ export default function AppHome() {
     return conversations.filter((c) => c.date === selectedDate);
   }, [conversations, selectedDate]);
 
+  // Filter manual sections based on search query
+  const filteredSections = React.useMemo(() => {
+    const q = manualSearchQuery.trim().toLowerCase();
+    if (!q) return manualSections;
+    return manualSections.filter((section) => {
+      const titleMatch = section.title.toLowerCase().includes(q);
+      const contentMatch = section.content.toLowerCase().includes(q);
+      const stepsMatch = section.steps?.some(s => s.toLowerCase().includes(q)) || false;
+      const faqMatch = section.faq?.some(f => f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q)) || false;
+      return titleMatch || contentMatch || stepsMatch || faqMatch;
+    });
+  }, [manualSearchQuery]);
+
   // Handle clicking on a conversation
   const handleConversationClick = (id: string) => {
     setActiveDetailId(id);
@@ -215,6 +331,12 @@ export default function AppHome() {
             onFinished={handleRecordingFinished}
           />
         )}
+
+        {/* 3. Onboarding Tour Overlay */}
+        <AppTour
+          isOpen={isTourOpen}
+          onClose={() => setIsTourOpen(false)}
+        />
 
         {/* Header Bar */}
         <header className="px-5 pt-8 pb-4 bg-gray-900/20 border-b border-white/5 flex items-center justify-between shrink-0">
@@ -651,13 +773,148 @@ export default function AppHome() {
                 )}
               </div>
             </div>
+          ) : activeTab === 'manual' ? (
+            /* User Manual View */
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-5 pt-4">
+              <div className="flex justify-between items-center mb-3 shrink-0">
+                <div className="space-y-0.5">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-violet-400 flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4" />
+                    <span>App Manual & Guide</span>
+                  </h2>
+                  <p className="text-[10px] text-gray-500 font-mono">Everything you need to know</p>
+                </div>
+                
+                {/* Restart Tour button */}
+                <button
+                  onClick={() => setIsTourOpen(true)}
+                  className="px-2.5 py-1.5 rounded-xl border border-violet-500/20 bg-violet-600/10 hover:bg-violet-600/20 text-[10px] font-bold text-violet-300 transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Restart Tour</span>
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="mb-4 shrink-0 relative flex items-center">
+                <input
+                  type="text"
+                  value={manualSearchQuery}
+                  onChange={(e) => setManualSearchQuery(e.target.value)}
+                  placeholder="Search guide by keywords (e.g. mic, API, tasks)..."
+                  className="w-full bg-gray-900 border border-white/10 rounded-xl pl-4 pr-10 py-2.5 text-xs text-white placeholder-gray-550 focus:outline-none focus:border-violet-500/50 transition-colors"
+                />
+                {manualSearchQuery && (
+                  <button
+                    onClick={() => setManualSearchQuery('')}
+                    className="absolute right-3 text-gray-400 hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Sections Accordion */}
+              <div 
+                className="flex-1 overflow-y-auto space-y-3.5 pb-24"
+                style={{
+                  paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))',
+                }}
+              >
+                {filteredSections.length > 0 ? (
+                  filteredSections.map((section) => {
+                    const isExpanded = manualSearchQuery ? true : !!expandedSections[section.id];
+                    return (
+                      <div
+                        key={section.id}
+                        className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-violet-500/25"
+                      >
+                        {/* Accordion Trigger */}
+                        <button
+                          onClick={() => {
+                            if (!manualSearchQuery) {
+                              setExpandedSections(prev => ({
+                                ...prev,
+                                [section.id]: !prev[section.id]
+                              }));
+                            }
+                          }}
+                          disabled={!!manualSearchQuery}
+                          className="w-full flex items-center justify-between p-4 text-left transition-colors hover:bg-white/2"
+                        >
+                          <div className="flex items-center gap-2">
+                            {section.icon}
+                            <span className="font-bold text-sm text-white">{section.title}</span>
+                          </div>
+                          {!manualSearchQuery && (
+                            <ChevronRight
+                              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                                isExpanded ? 'rotate-90 text-violet-400' : ''
+                              }`}
+                            />
+                          )}
+                        </button>
+
+                        {/* Accordion Content */}
+                        {isExpanded && (
+                          <div className="px-4 pb-4 pt-1 border-t border-white/5 bg-gray-900/20 text-xs text-gray-305 space-y-3">
+                            <p className="leading-relaxed">{section.content}</p>
+                            
+                            {/* Steps List */}
+                            {section.steps && (
+                              <ol className="space-y-2 list-decimal pl-4 text-gray-450">
+                                {section.steps.map((step, i) => (
+                                  <li key={i} className="leading-relaxed">
+                                    {step}
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
+
+                            {/* Q&A / FAQs */}
+                            {section.faq && (
+                              <div className="space-y-3 pt-1">
+                                {section.faq.map((item, i) => (
+                                  <div key={i} className="p-3 bg-white/2 rounded-xl border border-white/5 space-y-1.5">
+                                    <h4 className="font-bold text-white text-xs flex items-start gap-1">
+                                      <span className="text-violet-400 font-mono">Q:</span>
+                                      <span>{item.q}</span>
+                                    </h4>
+                                    <p className="text-[11px] text-gray-450 leading-relaxed pl-3.5">
+                                      {item.a}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  /* Empty state for search */
+                  <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+                    <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center text-gray-500 mx-auto">
+                      <HelpCircle className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">No Matches Found</h4>
+                      <p className="text-[11px] text-gray-500 max-w-[200px] leading-relaxed mx-auto">
+                        Try searching for other terms like 'microphone', 'API', 'Gemini', or 'tasks'.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             /* Feedback Form View */
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-5 pt-4">
               <div className="space-y-1.5 mb-4 shrink-0">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-violet-400">Share Feedback</h2>
-                <p className="text-xs text-gray-550">
-                  Suggest a feature, report an issue, or tell us how to improve.
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  All your recording data is stored strictly locally. Use this form to suggest new features, request changes, or submit enhancements directly to the developer.
                 </p>
               </div>
 
@@ -751,7 +1008,7 @@ export default function AppHome() {
 
         {/* Premium Bottom Navigation Footer */}
         <div 
-          className="absolute bottom-0 left-0 right-0 glass-dark px-6 pt-4 flex items-center justify-around z-20"
+          className="absolute bottom-0 left-0 right-0 glass-dark px-4 pt-4 flex items-center justify-between gap-1 z-20"
           style={{
             paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',
           }}
@@ -764,7 +1021,7 @@ export default function AppHome() {
             }`}
           >
             <Home className="w-5 h-5" />
-            <span className="text-[10px] font-bold tracking-wider uppercase">Feed</span>
+            <span className="text-[9px] font-bold tracking-wider uppercase">Feed</span>
           </button>
           
           {/* Tasks Tab */}
@@ -775,7 +1032,7 @@ export default function AppHome() {
             }`}
           >
             <ListChecks className="w-5 h-5" />
-            <span className="text-[10px] font-bold tracking-wider uppercase">To Work On</span>
+            <span className="text-[9px] font-bold tracking-wider uppercase">Tasks</span>
           </button>
 
           {/* Notes Tab */}
@@ -786,7 +1043,18 @@ export default function AppHome() {
             }`}
           >
             <StickyNote className="w-5 h-5" />
-            <span className="text-[10px] font-bold tracking-wider uppercase">Notes</span>
+            <span className="text-[9px] font-bold tracking-wider uppercase">Notes</span>
+          </button>
+
+          {/* Manual Tab */}
+          <button 
+            onClick={() => setActiveTab('manual')}
+            className={`flex flex-col items-center gap-1 transition-all ${
+              activeTab === 'manual' ? 'text-violet-400 animate-pulse' : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <BookOpen className="w-5 h-5" />
+            <span className="text-[9px] font-bold tracking-wider uppercase">Manual</span>
           </button>
 
           {/* Feedback Tab */}
@@ -797,7 +1065,7 @@ export default function AppHome() {
             }`}
           >
             <MessageSquare className="w-5 h-5" />
-            <span className="text-[10px] font-bold tracking-wider uppercase">Feedback</span>
+            <span className="text-[9px] font-bold tracking-wider uppercase">Feedback</span>
           </button>
         </div>
 
