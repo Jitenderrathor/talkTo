@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Home, Plus, Mic, Calendar, ChevronRight, MicOff, MessageSquare, BookOpen, User, RefreshCw } from 'lucide-react';
+import { Settings, Home, Plus, Mic, Calendar, ChevronRight, MicOff, MessageSquare, BookOpen, User, RefreshCw, StickyNote, Trash2, Edit2, Check, X } from 'lucide-react';
 import CalendarStrip from '@/components/CalendarStrip';
 import SettingsModal from '@/components/SettingsModal';
 import RecordScreen from '@/components/RecordScreen';
 import ConversationDetail from '@/components/ConversationDetail';
-import { getConversationsMetadata, ConversationMetadata, TaskItem, getGlobalTasks, addGlobalTask, toggleGlobalTask, deleteGlobalTask } from '@/lib/db';
+import { getConversationsMetadata, ConversationMetadata, TaskItem, getGlobalTasks, addGlobalTask, toggleGlobalTask, deleteGlobalTask, WorkingNote, getWorkingNotes, addWorkingNote, updateWorkingNote, deleteWorkingNote } from '@/lib/db';
 import { ListChecks } from 'lucide-react';
 
 export default function AppHome() {
@@ -18,10 +18,19 @@ export default function AppHome() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Global Tasks Board states
-  const [activeTab, setActiveTab] = useState<'feed' | 'tasks' | 'feedback'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'tasks' | 'notes' | 'feedback'>('feed');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [newTaskText, setNewTaskText] = useState('');
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed'>('all');
+
+  // Working Notes states
+  const [notes, setNotes] = useState<WorkingNote[]>([]);
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteTitle, setEditNoteTitle] = useState('');
+  const [editNoteContent, setEditNoteContent] = useState('');
 
   // Feedback states
   const [feedbackName, setFeedbackName] = useState('');
@@ -123,6 +132,12 @@ export default function AppHome() {
     setTasks(list);
   };
 
+  // Fetch working notes from DB
+  const loadNotes = async () => {
+    const list = await getWorkingNotes();
+    setNotes(list);
+  };
+
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskText.trim()) return;
@@ -144,6 +159,7 @@ export default function AppHome() {
   useEffect(() => {
     loadConversations();
     loadTasks();
+    loadNotes();
   }, [activeDetailId, isRecordingOpen, activeTab]);
 
   // Set of dates containing recordings for the calendar indicator dots
@@ -434,6 +450,207 @@ export default function AppHome() {
               {/* End of Tasks Scroll Wrapper */}
               </div>
             </div>
+          ) : activeTab === 'notes' ? (
+            /* Working Notes View */
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-5 pt-4">
+              <div className="flex justify-between items-center mb-4 shrink-0">
+                <div className="space-y-1">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-violet-400">Working Notes</h2>
+                  <p className="text-[10px] text-gray-500 font-mono">{notes.length} total notes</p>
+                </div>
+                {!isAddingNote && (
+                  <button
+                    onClick={() => {
+                      setIsAddingNote(true);
+                      setNoteTitle('');
+                      setNoteContent('');
+                    }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white transition-all shadow-md shadow-violet-600/10 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>New Note</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Add Note Form Card */}
+              {isAddingNote && (
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4 shrink-0 space-y-3.5 animate-scale-up">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                    <h3 className="text-xs font-bold text-violet-400 uppercase tracking-wider">Create New Note</h3>
+                    <button
+                      onClick={() => setIsAddingNote(false)}
+                      className="p-1 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      value={noteTitle}
+                      onChange={(e) => setNoteTitle(e.target.value)}
+                      placeholder="Note Title/Heading"
+                      className="w-full bg-gray-900 border border-white/10 rounded-xl px-4 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <textarea
+                      value={noteContent}
+                      onChange={(e) => setNoteContent(e.target.value)}
+                      placeholder="Type note content (paragraphs, pointers, etc.)...."
+                      rows={5}
+                      className="w-full bg-gray-900 border border-white/10 rounded-xl p-4 text-xs text-white placeholder-gray-550 focus:outline-none focus:border-violet-500/50 resize-none leading-relaxed"
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNote(false)}
+                      className="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!noteTitle.trim()) {
+                          alert("Please enter a note title.");
+                          return;
+                        }
+                        await addWorkingNote(noteTitle, noteContent);
+                        setNoteTitle('');
+                        setNoteContent('');
+                        setIsAddingNote(false);
+                        await loadNotes();
+                      }}
+                      className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white cursor-pointer"
+                    >
+                      Save Note
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Working Notes List */}
+              <div 
+                className="flex-1 overflow-y-auto space-y-4 pb-24"
+                style={{
+                  paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))',
+                }}
+              >
+                {notes.length > 0 ? (
+                  notes.map((note) => (
+                    <div
+                      key={note.id}
+                      className="p-4 bg-white/5 border border-white/10 rounded-2xl space-y-2.5 transition-all hover:border-violet-500/20 group"
+                    >
+                      {editingNoteId === note.id ? (
+                        <div className="space-y-3.5">
+                          <input
+                            type="text"
+                            value={editNoteTitle}
+                            onChange={(e) => setEditNoteTitle(e.target.value)}
+                            className="w-full bg-gray-900 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-violet-500/50"
+                          />
+                          <textarea
+                            value={editNoteContent}
+                            onChange={(e) => setEditNoteContent(e.target.value)}
+                            rows={4}
+                            className="w-full bg-gray-900 border border-white/10 rounded-xl p-4 text-xs text-white focus:outline-none focus:border-violet-500/50 resize-none leading-relaxed"
+                          />
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => setEditingNoteId(null)}
+                              className="px-3.5 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!editNoteTitle.trim()) {
+                                  alert("Please enter a note title.");
+                                  return;
+                                }
+                                await updateWorkingNote(note.id, editNoteTitle, editNoteContent);
+                                setEditingNoteId(null);
+                                await loadNotes();
+                              }}
+                              className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white cursor-pointer"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-bold text-sm text-white group-hover:text-violet-300 transition-colors">
+                                {note.title}
+                              </h3>
+                              <span className="text-[9px] text-gray-500 font-mono block mt-0.5">
+                                {new Date(note.createdAt).toLocaleDateString([], {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })} at {new Date(note.createdAt).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+
+                            <div className="shrink-0 flex items-center gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setEditingNoteId(note.id);
+                                  setEditNoteTitle(note.title);
+                                  setEditNoteContent(note.content);
+                                }}
+                                className="p-1.5 rounded-lg border border-white/5 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                                title="Edit Note"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (confirm("Delete this working note?")) {
+                                    await deleteWorkingNote(note.id);
+                                    await loadNotes();
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg border border-red-500/10 bg-red-500/5 text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
+                                title="Delete Note"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-gray-350 leading-relaxed font-sans whitespace-pre-line">
+                            {note.content}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  /* Empty state for Working Notes */
+                  <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+                    <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center text-gray-500 mx-auto">
+                      <StickyNote className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">No Notes Recorded</h4>
+                      <p className="text-[11px] text-gray-500 max-w-[200px] leading-relaxed mx-auto">
+                        Create your first working note to store key reminders, bullet points, or thoughts.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             /* Feedback Form View */
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-5 pt-4">
@@ -559,6 +776,17 @@ export default function AppHome() {
           >
             <ListChecks className="w-5 h-5" />
             <span className="text-[10px] font-bold tracking-wider uppercase">To Work On</span>
+          </button>
+
+          {/* Notes Tab */}
+          <button 
+            onClick={() => setActiveTab('notes')}
+            className={`flex flex-col items-center gap-1 transition-all ${
+              activeTab === 'notes' ? 'text-violet-400 animate-pulse' : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <StickyNote className="w-5 h-5" />
+            <span className="text-[10px] font-bold tracking-wider uppercase">Notes</span>
           </button>
 
           {/* Feedback Tab */}

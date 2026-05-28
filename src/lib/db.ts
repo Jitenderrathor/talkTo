@@ -234,3 +234,65 @@ export async function deleteGlobalTask(id: string): Promise<void> {
   const filtered = tasks.filter(t => t.id !== id);
   await saveGlobalTasks(filtered);
 }
+
+/**
+ * Working Notes database operations
+ */
+export interface WorkingNote {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: number;
+}
+
+const NOTES_KEY = 'talkto_working_notes';
+
+export async function getWorkingNotes(): Promise<WorkingNote[]> {
+  if (!isClient) return [];
+  try {
+    const list = await get<WorkingNote[]>(NOTES_KEY);
+    return list ? list.sort((a, b) => b.createdAt - a.createdAt) : [];
+  } catch (error) {
+    console.error('Failed to get working notes from IndexedDB:', error);
+    return [];
+  }
+}
+
+export async function saveWorkingNotes(notes: WorkingNote[]): Promise<void> {
+  if (!isClient) return;
+  try {
+    await set(NOTES_KEY, notes);
+  } catch (error) {
+    console.error('Failed to save working notes to IndexedDB:', error);
+    throw error;
+  }
+}
+
+export async function addWorkingNote(title: string, content: string): Promise<WorkingNote> {
+  const newNote: WorkingNote = {
+    id: `note_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    title: title.trim(),
+    content: content.trim(),
+    createdAt: Date.now()
+  };
+  const notes = await getWorkingNotes();
+  notes.unshift(newNote);
+  await saveWorkingNotes(notes);
+  return newNote;
+}
+
+export async function updateWorkingNote(id: string, title: string, content: string): Promise<void> {
+  const notes = await getWorkingNotes();
+  const index = notes.findIndex(n => n.id === id);
+  if (index >= 0) {
+    notes[index].title = title.trim();
+    notes[index].content = content.trim();
+    await saveWorkingNotes(notes);
+  }
+}
+
+export async function deleteWorkingNote(id: string): Promise<void> {
+  const notes = await getWorkingNotes();
+  const filtered = notes.filter(n => n.id !== id);
+  await saveWorkingNotes(filtered);
+}
