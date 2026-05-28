@@ -242,22 +242,31 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
 
       let finalTranscript = textToProcess || transcript;
 
-      // 1. If we have a recorded audio blob and a Groq API key, perform Groq Whisper transcription
-      if (audioBlob && groqApiKey) {
-        setProcessingStep('Transcribing audio with Groq Whisper...');
-        try {
-          let whisperLang = undefined;
-          if (lang === 'hi-IN') whisperLang = 'hi';
-          else if (lang === 'en-US') whisperLang = 'en';
-
-          const transcribedText = await transcribeSpeech(audioBlob, groqApiKey, whisperLang);
-          if (transcribedText.trim()) {
-            finalTranscript = transcribedText.trim();
-            // Update local transcript state so it displays correctly
-            setTranscript(finalTranscript);
+      // 1. If we have a recorded audio blob, perform Groq Whisper transcription
+      if (audioBlob) {
+        if (!groqApiKey) {
+          if (!finalTranscript.trim()) {
+            throw new Error('Groq API Key is not configured in Settings. Please open Settings (Admin) and configure your Groq API key to transcribe audio.');
           }
-        } catch (whisperErr) {
-          console.error('Groq Whisper transcription failed, falling back to local recognition:', whisperErr);
+        } else {
+          setProcessingStep('Transcribing audio with Groq Whisper...');
+          try {
+            let whisperLang = undefined;
+            if (lang === 'hi-IN') whisperLang = 'hi';
+            else if (lang === 'en-US') whisperLang = 'en';
+
+            const transcribedText = await transcribeSpeech(audioBlob, groqApiKey, whisperLang);
+            if (transcribedText.trim()) {
+              finalTranscript = transcribedText.trim();
+              // Update local transcript state so it displays correctly
+              setTranscript(finalTranscript);
+            }
+          } catch (whisperErr: any) {
+            console.error('Groq Whisper transcription failed:', whisperErr);
+            if (!finalTranscript.trim()) {
+              throw new Error(`Groq Whisper transcription failed: ${whisperErr.message || whisperErr}`);
+            }
+          }
         }
       }
 
