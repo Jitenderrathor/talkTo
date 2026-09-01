@@ -8,9 +8,10 @@ import { textToSpeech } from '@/lib/groq';
 interface ConversationDetailProps {
   id: string;
   onBack: () => void;
+  isInlineDesktop?: boolean;
 }
 
-export default function ConversationDetail({ id, onBack }: ConversationDetailProps) {
+export default function ConversationDetail({ id, onBack, isInlineDesktop = false }: ConversationDetailProps) {
   const [loading, setLoading] = useState(true);
   const [conversation, setConversation] = useState<IConversationDetail | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -611,20 +612,20 @@ export default function ConversationDetail({ id, onBack }: ConversationDetailPro
   }
 
   return (
-    <div className="absolute inset-0 z-40 bg-gray-950 flex flex-col justify-between overflow-hidden">
+    <div className={`${isInlineDesktop ? 'relative w-full h-full' : 'fixed inset-0 z-40'} bg-gray-950 flex flex-col justify-between overflow-hidden`}>
       {/* Top Header Bar */}
       <div 
-        className="flex items-center justify-between px-5 pb-5 border-b border-white/5 shrink-0"
-        style={{
-          paddingTop: 'calc(2.5rem + env(safe-area-inset-top, 0px))',
-        }}
+        className="flex items-center justify-between px-4 lg:px-6 py-3.5 border-b border-white/5 shrink-0 bg-gray-900/40"
+        style={!isInlineDesktop ? {
+          paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))',
+        } : undefined}
       >
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+          className="flex items-center gap-1.5 text-xs lg:text-sm font-medium text-gray-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/5 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Home</span>
+          <span>{isInlineDesktop ? 'Close Preview' : 'Home'}</span>
         </button>
 
         <div className="flex items-center gap-2">

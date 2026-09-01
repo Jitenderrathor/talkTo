@@ -31,7 +31,7 @@ export async function transcribeSpeech(audioBlob: Blob, apiKey: string, language
 }
 
 /**
- * Structure a text transcript into a professional note using Groq's Chat Completions (Llama 3).
+ * Structure a text transcript into a professional note using Groq's Chat Completions.
  */
 export async function structureSpeechWithGroq(
   transcript: string,
@@ -43,36 +43,39 @@ export async function structureSpeechWithGroq(
   }
 
   const systemPrompt = `
-You are an expert PUA (Pickup Artist) and Dating Coach assistant.
-Your job is to analyze a raw conversation transcript where the user dictates an interaction. The user may speak in Hindi, English, or a mix of both (Hinglish).
+You are an expert Dating Coach & Conversation Structuring AI assistant.
+Your job is to analyze a raw conversation transcript where the user dictates an interaction. The user may speak in Hinglish (a natural mix of Hindi and English), Hindi, or English.
 
-Please output a JSON object containing two main keys:
-1. "aiNotes": An object containing the AI dating coach's structured notes based on the interaction. Focus on openers, hooked points, comfort-building, compliance, chemistry, and actionable improvements.
-   - "title": A short, clean, descriptive title for the interaction (max 5-6 words, e.g., "Daygame approach at mall").
-   - "summary": A concise narrative paragraph summarizing the conversation and analyzing the chemistry, dynamics, and progression from a coach's perspective. Write in the first person ("I analyzed an interaction where...").
-   - "takeaways": An array of EXACTLY three key compliance points or dynamics observed (e.g., hook achieved, comfort established, number closed).
-   - "toWorkOn": An array of specific improvements the user should work on (e.g., vocal range, teasing).
-2. "transcriptStructured": An object containing the exact transcription sections as dictated by the user, checked ONLY for spelling typos and critical grammatical issues.
-   CRITICAL REQUIREMENT: For "transcriptStructured.conversation", DO NOT rewrite, paraphrase, summarize, or translate the user's spoken words. Preserve their exact words, phrasing, vocabulary, tone, and language (whether Hindi, English, or Hinglish) 100% verbatim. Fix ONLY spelling errors or minor grammatical issues. If there are no issues, keep the text completely untouched.
-   For sections inside "transcriptStructured":
-   - "summary": A brief, faithful summary of what they dictated (preserving the user's original language, tone, and vocabulary; only correcting spelling/typos).
-   - "conversation": The segment representing the conversation description, completely verbatim except for spelling/grammar fixes.
-   - "takeaways": Extract any takeaways or key points the user spoke about. If explicitly dictated (e.g., after the word "takeaways"), list those points. If not explicitly dictated but discussed, extract them using the user's exact phrasing and language as closely as possible, only correcting spelling/grammar.
-   - "toWorkOn": Extract any action items or things to work on the user spoke about. If explicitly dictated (e.g., after "things to work on"), list them. If not explicitly dictated but discussed, extract them using the user's exact phrasing and language as closely as possible, only correcting spelling/grammar.
+CRITICAL LANGUAGE & SCRIPT RULES:
+1. ABSOLUTELY NEVER output Arabic, Urdu, Persian, or any Nastaliq/Arabic-based script under ANY circumstances.
+2. All AI Notes (title, summary, takeaways, toWorkOn) MUST be written in clear, fluent, professional English from a dating coach perspective.
+3. The conversation transcript (transcriptStructured.conversation) must be formatted in clean, natural English and Romanized Hinglish using ONLY the Latin/English alphabet. If the user spoke Hindi/Hinglish or if any Arabic/Urdu characters appeared in the raw transcript, convert/transliterate them into standard Romanized English/Hinglish.
+4. Even if the dictation is brief or hesitant (e.g. testing the mic or unsure what to say), extract insightful conversational analysis, 3 takeaways, and actionable advice to help the user improve.
 
-Your output MUST be valid JSON conforming to this schema:
+Please output a JSON object strictly conforming to this schema:
 {
   "aiNotes": {
-    "title": "string",
-    "summary": "string",
-    "takeaways": ["string", "string", "string"],
-    "toWorkOn": ["string", "string"]
+    "title": "A short, sharp English title (max 5-6 words)",
+    "summary": "A cohesive narrative paragraph summarizing the conversation and analyzing the chemistry, dynamics, and progression from a coach perspective. Write in the first person ('I analyzed an interaction where...')",
+    "takeaways": [
+      "Key dynamic or interaction point observed",
+      "Second key takeaway",
+      "Third key takeaway"
+    ],
+    "toWorkOn": [
+      "Actionable improvement 1",
+      "Actionable improvement 2"
+    ]
   },
   "transcriptStructured": {
-    "summary": "string",
-    "conversation": "string",
-    "takeaways": ["string", "string"],
-    "toWorkOn": ["string", "string"]
+    "summary": "Clean, concise summary in clear English",
+    "conversation": "The dictated conversation in clean English / Romanized Hinglish (using only English/Latin alphabet, zero Arabic/Urdu script)",
+    "takeaways": [
+      "Key points from the conversation"
+    ],
+    "toWorkOn": [
+      "Action items / things to work on"
+    ]
   }
 }
 
@@ -96,7 +99,7 @@ Do not include any markdown formatting like \`\`\`json or \`\`\` around the JSON
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(
-      errorData.error || `Failed to structure note with Groq Llama (Status: ${response.status})`
+      errorData.error || `Failed to structure note with Groq AI (Status: ${response.status})`
     );
   }
 

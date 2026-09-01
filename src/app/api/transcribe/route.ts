@@ -32,10 +32,13 @@ export async function POST(request: Request) {
     groqFormData.append('file', file, `speech.${extension}`);
     groqFormData.append('model', 'whisper-large-v3');
     
-    // Optimize transcription by passing bilingual prompt to prevent translation bias
-    groqFormData.append('prompt', 'Transcribe the audio verbatim. The user may speak in Hindi, English, or Hinglish (mixed Hindi-English). Do not translate Hindi speech to English, transcribe it verbatim in Hindi or Hinglish script.');
+    // Optimize transcription by passing bilingual Hinglish prompt to preserve mixed vocabulary and prevent translation
+    groqFormData.append(
+      'prompt',
+      'Transcribe speech verbatim. The speaker may use Hinglish (a natural mix of Hindi and English words, e.g., "maine direct approach kiya aur compliment diya", "vocal tonality acchi thi", "comfort build hua", "Instagram exchange kiya"). Transcribe verbatim in Romanized Hinglish or original spoken phrasing. Do not translate Hindi or Hinglish speech to English.'
+    );
 
-    if (language && language !== 'auto') {
+    if (language && language !== 'auto' && language !== 'hinglish') {
       groqFormData.append('language', language);
     }
 

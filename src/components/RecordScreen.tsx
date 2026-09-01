@@ -18,7 +18,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
   const [duration, setDuration] = useState(0);
   const [transcript, setTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [lang, setLang] = useState('en-US');
+  const [lang, setLang] = useState('hinglish');
   
   // Custom manual typing fallback if Speech API is unavailable/blocked
   const [showTextFallback, setShowTextFallback] = useState(false);
@@ -37,7 +37,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
   // Clean up on unmount and load language preference
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedLang = localStorage.getItem('talkto_transcription_lang') || 'en-US';
+      const savedLang = localStorage.getItem('talkto_transcription_lang') || 'hinglish';
       setLang(savedLang);
     }
     return () => {
@@ -110,7 +110,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = lang;
+        recognition.lang = lang === 'hinglish' ? 'en-IN' : (lang === 'hi-IN' ? 'hi-IN' : 'en-US');
 
         recognition.onresult = (event: any) => {
           let interimTranscript = '';
@@ -251,9 +251,10 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
         } else {
           setProcessingStep('Transcribing audio with Groq Whisper...');
           try {
-            let whisperLang = undefined;
+            let whisperLang: string | undefined = undefined;
             if (lang === 'hi-IN') whisperLang = 'hi';
             else if (lang === 'en-US') whisperLang = 'en';
+            else whisperLang = undefined; // Hinglish / Auto uses Whisper multilingual detection with custom Hinglish prompt
 
             const transcribedText = await transcribeSpeech(audioBlob, groqApiKey, whisperLang);
             if (transcribedText.trim()) {
@@ -282,7 +283,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
       // 2. Structure the final transcript using selected AI provider
       let structuredNote;
       if (provider === 'groq' && groqApiKey) {
-        setProcessingStep('Structuring notes with Groq Llama...');
+        setProcessingStep('Structuring notes with Groq AI...');
         structuredNote = await structureSpeechWithGroq(finalTranscript, groqApiKey);
       } else {
         setProcessingStep(geminiApiKey ? 'Structuring notes with Gemini AI...' : 'Local AI Structuring...');
@@ -353,26 +354,27 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
   };
 
   return (
-    <div 
-      className="absolute inset-0 z-40 bg-gray-950 flex flex-col justify-between px-6 animate-fade-in"
-      style={{
-        paddingTop: 'calc(2.5rem + env(safe-area-inset-top, 0px))',
-        paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))',
-      }}
-    >
-      {/* Top Header */}
-      <div className="flex justify-between items-center shrink-0">
-        <h2 className="text-xl font-bold bg-gradient-to-r from-violet-400 to-indigo-300 bg-clip-text text-transparent">
-          Record Conversation
-        </h2>
-        <button
-          onClick={onClose}
-          disabled={isProcessing}
-          className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all disabled:opacity-30"
-        >
-          <X className="w-5 h-5" />
-        </button>
-      </div>
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-0 md:p-6 animate-fade-in">
+      <div 
+        className="w-full h-full md:h-auto md:max-h-[92vh] md:max-w-lg md:rounded-3xl md:border md:border-white/10 bg-gray-950 flex flex-col justify-between p-6 overflow-y-auto relative shadow-2xl"
+        style={{
+          paddingTop: 'calc(1.5rem + env(safe-area-inset-top, 0px))',
+          paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))',
+        }}
+      >
+        {/* Top Header */}
+        <div className="flex justify-between items-center shrink-0 mb-4">
+          <h2 className="text-xl font-bold bg-gradient-to-r from-violet-400 to-indigo-300 bg-clip-text text-transparent">
+            Record Conversation
+          </h2>
+          <button
+            onClick={onClose}
+            disabled={isProcessing}
+            className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all disabled:opacity-30 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
       {/* Center Speaker / Mic area */}
       <div className="flex-1 flex flex-col items-center justify-center relative py-6 overflow-y-auto max-h-full w-full">
@@ -456,8 +458,20 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
           /* Mic / Speaker Recording View */
           <div className="flex flex-col items-center space-y-8 w-full max-w-sm">
             
-            {/* Language Selector Selector */}
-            <div className="flex gap-2 bg-white/5 p-1 rounded-2xl border border-white/5 shrink-0 z-20">
+            {/* Language Selector */}
+            <div className="flex gap-1.5 bg-white/5 p-1 rounded-2xl border border-white/5 shrink-0 z-20">
+              <button
+                type="button"
+                onClick={() => handleLanguageChange('hinglish')}
+                disabled={isRecording || isProcessing}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  lang === 'hinglish'
+                    ? 'bg-violet-600 text-white shadow-md shadow-violet-600/10'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                } disabled:opacity-50`}
+              >
+                Hinglish
+              </button>
               <button
                 type="button"
                 onClick={() => handleLanguageChange('en-US')}
@@ -578,6 +592,7 @@ export default function RecordScreen({ onClose, onFinished }: RecordScreenProps)
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -43,16 +43,14 @@ export default function CalendarStrip({
     return list;
   }, []);
 
-  // Format month and year header (e.g., "May 2026")
   const headerText = React.useMemo(() => {
     const selected = new Date(selectedDate);
     if (isNaN(selected.getTime())) {
-      return new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      return new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     }
-    return selected.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    return selected.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   }, [selectedDate]);
 
-  // Center the selected date on load
   useEffect(() => {
     if (scrollRef.current) {
       const container = scrollRef.current;
@@ -70,16 +68,28 @@ export default function CalendarStrip({
   }, [selectedDate]);
 
   return (
-    <div className="flex flex-col bg-gray-900/40 border-b border-white/5 py-3 shrink-0">
+    <div className="flex flex-col bg-transparent border-b border-white/[0.06] py-2.5 shrink-0">
       {/* Month/Year title */}
-      <div className="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-violet-400">
-        {headerText}
+      <div className="px-4 mb-2 flex items-center justify-between text-[11px] font-medium text-gray-400">
+        <span className="font-semibold text-gray-300">{headerText}</span>
+        <button
+          onClick={() => {
+            const today = new Date();
+            const y = today.getFullYear();
+            const m = String(today.getMonth() + 1).padStart(2, '0');
+            const d = String(today.getDate()).padStart(2, '0');
+            onSelectDate(`${y}-${m}-${d}`);
+          }}
+          className="text-[10px] text-violet-400 hover:text-violet-300 font-medium cursor-pointer"
+        >
+          Today
+        </button>
       </div>
 
       {/* Scrollable list */}
       <div
         ref={scrollRef}
-        className="flex gap-2 overflow-x-auto px-4 pb-1.5 scrollbar-none"
+        className="flex gap-1.5 overflow-x-auto px-4 pb-1 scrollbar-none"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {dates.map((dateObj) => {
@@ -91,29 +101,26 @@ export default function CalendarStrip({
               key={dateObj.formattedDate}
               data-selected={isSelected}
               onClick={() => onSelectDate(dateObj.formattedDate)}
-              className={`flex flex-col items-center justify-between shrink-0 w-12 py-2.5 rounded-xl transition-all relative ${
+              className={`flex flex-col items-center justify-between shrink-0 w-11 py-2 rounded-xl transition-all relative cursor-pointer ${
                 isSelected
-                  ? 'bg-violet-600 text-white font-semibold shadow-md shadow-violet-600/35 scale-105'
-                  : 'bg-white/5 text-gray-400 hover:text-gray-200 hover:bg-white/10'
+                  ? 'bg-violet-600 text-white font-semibold shadow-sm'
+                  : 'bg-white/[0.03] text-gray-400 hover:text-gray-200 hover:bg-white/[0.06]'
               }`}
             >
-              {/* Day Name (e.g. Mon) */}
-              <span className={`text-[10px] tracking-wide uppercase ${isSelected ? 'text-violet-100' : 'text-gray-500'}`}>
+              {/* Day Name */}
+              <span className={`text-[10px] uppercase font-medium ${isSelected ? 'text-violet-100' : 'text-gray-500'}`}>
                 {dateObj.dayName}
               </span>
 
-              {/* Day Number (e.g. 26) */}
-              <span className="text-sm font-medium mt-1 leading-none">
+              {/* Day Number */}
+              <span className="text-xs font-semibold mt-0.5 leading-none">
                 {dateObj.dayNumber}
               </span>
 
-              {/* Activity Dot & Today Marker */}
-              <div className="flex gap-1 items-center justify-center mt-1.5 h-1">
-                {dateObj.isToday && !isSelected && (
-                  <span className="w-1 h-1 rounded-full bg-violet-400" />
-                )}
+              {/* Activity Dot */}
+              <div className="flex gap-1 items-center justify-center mt-1 h-1">
                 {hasActivity && (
-                  <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-violet-500 animate-pulse'}`} />
+                  <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-violet-400'}`} />
                 )}
               </div>
             </button>
